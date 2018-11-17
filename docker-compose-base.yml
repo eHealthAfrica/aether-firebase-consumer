@@ -12,6 +12,8 @@ services:
      - AETHER_CONFIG_FIREBASE_PATH=
      - AETHER_FB_CREDENTIAL_PATH=
      - AETHER_FB_URL=
+     - AETHER_SERVER_ALIAS=
+     - AETHER_FB_HASH_PATH=
     volumes:
      - ./firebase/conf:/code/conf
     command: start

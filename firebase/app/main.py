@@ -33,25 +33,81 @@ from firebase_admin import credentials
 from firebase_admin import firestore as CFS
 from firebase_admin import db as RTDB
 
+from app import utils
+
 EXCLUDED_TOPICS = ['__confluent.support.metrics']
 
 # where in FB-RTDB is the head of config?
 AETHER_CONFIG_FIREBASE_PATH = os.env['AETHER_CONFIG_FIREBASE_PATH']
 # credentials to the db
 AETHER_FB_CREDENTIAL_PATH = os.env['AETHER_FB_CREDENTIAL_PATH']
+AETHER_FB_HASH_PATH = os.env['AETHER_FB_HASH_PATH']
 # instance url
 AETHER_FB_URL = os.env['AETHER_FB_URL']
+# this Aether server is called in firebase
+AETHER_SERVER_ALIAS= os.env['AETHER_SERVER_ALIAS']
+
+LOG = logging.getLogger('FirebaseConsumer')
 
 class FirebaseConsumer(object):
 
     def __init__(self):
-        pass
+        self.cfs_workers = {}
+        self.rtdb_workers = {}
+
+        self.authenticate()
+        self.handle_config_update(
+            data=self.get_config()
+            path='/')
+        self.subscribe_to_config()
+
+
+    def authenticate(self):
+        cred = credentials.Certificate(AETHER_FB_CREDENTIAL_PATH)
+        firebase_admin.initialize_app(cred, {
+            'databaseURL': AETHER_FB_URL
+        })
+
+    def get_config(self):
+        ref = RTDB.reference(AETHER_CONFIG_FIREBASE_PATH)
+        return ref.get()
 
     def subscribe_to_config(self):
+        RTDB.reference(AETHER_CONFIG_FIREBASE_PATH).listen(self.handle_config_update)
+
+    def handle_config_update(self, event=None, data=None, path=None):
+        path = path or event.path
+        data = data or event.data
+
+
+class FirebaseWorker(object):
+
+    def __init__(self, config):
+        self.name = name
+        self.config = config
+        self.configure(self.config)
+
+    def check_config_update(self, config):
+        new_hash = utils.hash(config)
+        if new_hash is self.config_hash:
+            return
+        else:
+            self.configure(config)
+
+    def configure(self, config):
+        self.config_hash = utils.hash(config)
+
+    def stop(self):
         pass
 
-    def handle_config_update(self, config):
+    def start(self):
         pass
+
+class RTDBWorker(FirebaseWorker):
+    pass
+
+class CFSWorker(FirebaseWorker):
+    pass
 
 if __name__ == "__main__":
     viewer = FirebaseConsumer()
