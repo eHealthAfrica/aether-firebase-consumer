@@ -1,0 +1,17 @@
+version: "2.1"
+services:
+  firebase-consumer:
+    image: ehealthafrica/aether-firebase-consumer
+    build: ./firebase
+    stdin_open: true
+    tty: true
+    environment:
+     - PYTHONUNBUFFERED=1
+     - KAFKA_CONFIG=/code/conf/consumer/kafka.json
+     - KAFKA_URL=kafka:29092
+     - AETHER_CONFIG_FIREBASE_PATH=
+     - AETHER_FB_CREDENTIAL_PATH=
+     - AETHER_FB_URL=
+    volumes:
+     - ./firebase/conf:/code/conf
+    command: start

@@ -1,0 +1,14 @@
+version: "2.1"
+services:
+
+  firebase-consumer:
+    extends:
+      file: docker-compose-base.yml
+      service: firebase-consumer
+    networks:
+      - aether
+
+networks:
+  aether:
+    external:
+      name: aether_internal

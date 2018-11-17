@@ -1,0 +1,3 @@
+[submodule "aether-bootstrap"]
+	path = aether-bootstrap
+	url = https://github.com/eHealthAfrica/aether-bootstrap

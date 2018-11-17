@@ -1,0 +1,14 @@
+version: "2.1"
+services:
+
+  firebases-consumer-test:
+    extends:
+      file: docker-compose-base.yml
+      service: firebases-consumer
+    networks:
+      - test_net
+
+networks:
+  test_net:
+    external:
+      name: aether_test
