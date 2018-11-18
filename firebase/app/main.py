@@ -33,21 +33,22 @@ from firebase_admin import credentials
 from firebase_admin import firestore as CFS
 from firebase_admin import db as RTDB
 
-from app import utils
+import utils
 
 EXCLUDED_TOPICS = ['__confluent.support.metrics']
 
 # where in FB-RTDB is the head of config?
-AETHER_CONFIG_FIREBASE_PATH = os.env['AETHER_CONFIG_FIREBASE_PATH']
+AETHER_CONFIG_FIREBASE_PATH = os.environ['AETHER_CONFIG_FIREBASE_PATH']
 # credentials to the db
-AETHER_FB_CREDENTIAL_PATH = os.env['AETHER_FB_CREDENTIAL_PATH']
-AETHER_FB_HASH_PATH = os.env['AETHER_FB_HASH_PATH']
+AETHER_FB_CREDENTIAL_PATH = os.environ['AETHER_FB_CREDENTIAL_PATH']
+AETHER_FB_HASH_PATH = os.environ['AETHER_FB_HASH_PATH']
 # instance url
-AETHER_FB_URL = os.env['AETHER_FB_URL']
+AETHER_FB_URL = os.environ['AETHER_FB_URL']
 # this Aether server is called in firebase
-AETHER_SERVER_ALIAS= os.env['AETHER_SERVER_ALIAS']
+AETHER_SERVER_ALIAS= os.environ['AETHER_SERVER_ALIAS']
 
 LOG = logging.getLogger('FirebaseConsumer')
+LOG.setLevel(logging.DEBUG)
 
 class FirebaseConsumer(object):
 
@@ -57,7 +58,7 @@ class FirebaseConsumer(object):
 
         self.authenticate()
         self.handle_config_update(
-            data=self.get_config()
+            data=self.get_config(),
             path='/')
         self.subscribe_to_config()
 
@@ -70,7 +71,9 @@ class FirebaseConsumer(object):
 
     def get_config(self):
         ref = RTDB.reference(AETHER_CONFIG_FIREBASE_PATH)
-        return ref.get()
+        config = ref.get()
+        logging.debug(f'Initial configuration: {config}')
+        return config
 
     def subscribe_to_config(self):
         RTDB.reference(AETHER_CONFIG_FIREBASE_PATH).listen(self.handle_config_update)
