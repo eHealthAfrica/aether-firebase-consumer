@@ -7,6 +7,8 @@ services:
       service: firebase-consumer
     networks:
       - aether
+    volumes:
+      - ${AETHER_FB_CREDENTIAL_PATH}:/opt/firebase/cert.json
 
 networks:
   aether:

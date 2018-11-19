@@ -20,7 +20,7 @@
 
 from hashlib import md5
 import json
-    
+
 # This is our general use hashing function
 # Both for ensuring consistency in Kafka/FB
 # and detecting config changes locally.
@@ -30,3 +30,23 @@ def hash(msg):
     encoded_msg = sorted_msg.encode('utf-8')
     hash = str(md5(encoded_msg).hexdigest())[:16]
     return hash
+
+# These operations are for dealing with nested dictionaries
+# Primarily for getting and setting config data
+
+# _dict -> {"a":{"b":{"c":1}}} keys -> ["a","b"] 
+# = {"c":1} 
+def get_nested(_dict, keys):
+    if len(keys) > 1:
+        return get_nested(_dict[keys[0]], keys[1:])
+    else:
+        return _dict[keys[0]]
+
+# _dict -> {"a":{"b":{"c":1}}} keys -> ["a","b"], value -> "new"
+# =  {"a":{"b": "new"}}
+def replace_nested(_dict, keys, value):
+    if len(keys) > 1:
+        _dict[keys[0]] = replace_nested(_dict[keys[0]], keys[1:], value)
+    else:
+        _dict[keys[0]] = value
+    return _dict
