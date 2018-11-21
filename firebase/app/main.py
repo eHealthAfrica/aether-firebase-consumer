@@ -74,6 +74,7 @@ class FirebaseConsumer(object):
 
     def update_config(self, keys, value):
         self.config = utils.replace_nested(self.config, keys, value)
+        LOG.debug('Configuration updated.')
 
     def subscribe_to_config(self):
         LOG.debug('Subscribing to changes.')
@@ -86,18 +87,29 @@ class FirebaseConsumer(object):
         if not self.config:
             self.config = data
             LOG.debug('First config set.')
+            self.initialize_workers()
+            return 
+        path_parts = [i for i in path.split('/') if i]  # filter blank path elements
+        self.update_config(path_parts, data)
+        if path_parts[0] is not '_tracked':
+            LOG.debug('Changes do not effect tracked entities')
             return
-        for k, v in event.__dict__.items():
-            LOG.debug(f'{k} : {v}')
-        path_parts = path.split('/')
-        if len(path_parts) < 3:
-            LOG.debug('Changes do not effect data tracked entities')
-            return
-
+        else:
+            conf_type, db_type, data_type = path_parts[0:3]
+            Log.debug(f'Propogating change to {db_type} -> {data_type}')
+            
+    def initialize_workers(self):
+        cfs = self.config.get('_tracked', {}).get('cfs', {})
+        rtdb = self.config.get('_tracked', {}).get('rtdb', {})
+        for name, config in cfs.items():
+            self.cfs_workers[name] = CFSWorker(name, config)
+        for name, config in rtdb.items():
+            self.rtdb_workers[name] = RTDBWorker(name, config)
 
 class FirebaseWorker(object):
 
-    def __init__(self, config):
+    def __init__(self, name, config):
+        LOG.debug(f'New worker: {name}')
         self.name = name
         self.config = config
         self.configure(self.config)
@@ -111,6 +123,9 @@ class FirebaseWorker(object):
 
     def configure(self, config):
         self.config_hash = utils.hash(config)
+
+    def update(self, config):
+        LOG.debug(f'Update to {self.name}')
 
     def stop(self):
         pass
