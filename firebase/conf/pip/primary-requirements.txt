@@ -11,6 +11,7 @@
 aet.consumer
 firebase-admin
 flake8
+gevent
 mock
 pytest
 pytest-runner

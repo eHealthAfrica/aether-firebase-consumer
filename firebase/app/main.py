@@ -18,14 +18,19 @@
 # specific language governing permissions and limitations
 # under the License.
 
+from gevent import monkey, sleep
+# need to patch sockets to make requests async
+monkey.patch_all()
+
 import contextlib
 import errno
-import os
+import gevent
+from gevent.pool import Pool
 import json
 import logging
+import os
 import signal
 import sys
-from time import sleep
 
 from aet.consumer import KafkaConsumer
 import firebase_admin
@@ -58,12 +63,17 @@ LOG.setLevel(logging.DEBUG)
 class FirebaseConsumer(object):
 
     def __init__(self):
+        self.killed = False
         self.cfs_workers = {}
         self.rtdb_workers = {}
         self.config = None
         LOG.debug('Initializing Firebase Connection')
         self.authenticate()
         self.subscribe_to_config()
+        signal.signal(signal.SIGTERM, self.kill)
+        signal.signal(signal.SIGINT, self.kill)
+        gevent.signal(signal.SIGTERM, self.kill)
+        self.run()
 
     def authenticate(self):
         cred = credentials.Certificate(AETHER_FB_CREDENTIAL_PATH)
@@ -79,6 +89,23 @@ class FirebaseConsumer(object):
     def subscribe_to_config(self):
         LOG.debug('Subscribing to changes.')
         RTDB.reference(AETHER_CONFIG_FIREBASE_PATH).listen(self.handle_config_update)
+
+    def kill(self, *args, **kwargs):
+        self.killed = True
+        LOG.debug('Firebase Consumer caught kill signal.')
+        self.kill_children_dict(self.cfs_workers)
+        self.kill_children_dict(self.rtdb_workers)
+
+    def kill_children_dict(self, _dict):
+        for key, controller in _dict.items():
+            LOG.debug(f'Signaling shutdown to {controller.name}.')
+            controller.kill()
+
+    def safe_sleep(self, dur):
+        # keeps shutdown time low by yielding during sleep and checking if killed.
+        for x in range(dur):
+            if not self.killed:
+                sleep(1)        
 
     def handle_config_update(self, event=None):
         path = event.path
@@ -102,17 +129,21 @@ class FirebaseConsumer(object):
         cfs = self.config.get('_tracked', {}).get('cfs', {})
         rtdb = self.config.get('_tracked', {}).get('rtdb', {})
         for name, config in cfs.items():
-            self.cfs_workers[name] = CFSWorker(name, config)
+            self.cfs_workers[name] = CFSWorker(name, config, self)
         for name, config in rtdb.items():
-            self.rtdb_workers[name] = RTDBWorker(name, config)
+            self.rtdb_workers[name] = RTDBWorker(name, config, self)
+
 
 class FirebaseWorker(object):
 
-    def __init__(self, name, config):
+    def __init__(self, name, config, parent):
         LOG.debug(f'New worker: {name}')
+        self.killed = False
         self.name = name
         self.config = config
+        self.parent = parent
         self.configure(self.config)
+        self.start()
 
     def check_config_update(self, config):
         new_hash = utils.hash(config)
@@ -125,19 +156,52 @@ class FirebaseWorker(object):
         self.config_hash = utils.hash(config)
 
     def update(self, config):
-        LOG.debug(f'Update to {self.name}')
+        LOG.debug(f'Update to config in {self.name}')
+        self.pause()
+        # wait for cycle to complete (30?)
+        # update configuration
+        # resume
 
-    def stop(self):
-        pass
+    def pause(self):
+        self.paused = True
+
+    def resume(self):
+        self.paused = False
 
     def start(self):
+        self.worker = gevent.spawn(self.run)
         pass
 
+    def kill(self):
+        LOG.debug(f'Thread for {self.name} killed.')
+        self.killed = True
+
+    def run(self):
+        while not self.killed:
+            if self.paused:
+                LOG.debug(f'Thread for {self.name} paused.')
+                self.sleep(10)
+                continue
+            self.sleep(1)
+        LOG.debug(f'{self.name} exiting.')
+
+    def sleep(self, dur):
+        try:
+            self.parent.safe_sleep(dur)
+        except AttributeError:  # Parent is likely dead
+            pass
+
+
 class RTDBWorker(FirebaseWorker):
-    pass
+    
+    def submit(self, msg):
+        pass
+
 
 class CFSWorker(FirebaseWorker):
-    pass
+    
+    def submit(self, msg):
+        pass
 
 if __name__ == "__main__":
     viewer = FirebaseConsumer()
