@@ -50,7 +50,7 @@ case "$1" in
     pip_freeze )
 
         rm -rf /tmp/env
-        pip3 install -f ./conf/pip/dependencies -r ./conf/pip/primary-requirements.txt --upgrade
+        pip3 install -r ./conf/pip/primary-requirements.txt --upgrade
 
         cat /code/conf/pip/requirements_header.txt | tee conf/pip/requirements.txt
         pip freeze --local | grep -v appdir | tee -a conf/pip/requirements.txt
