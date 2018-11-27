@@ -32,6 +32,8 @@ from firebase_admin import credentials
 from firebase_admin import firestore as CFS
 from firebase_admin import db as RTDB
 
+from healthcheck import HealthcheckServer
+
 import utils
 
 EXCLUDED_TOPICS = ['__confluent.support.metrics']
@@ -45,6 +47,7 @@ AETHER_FB_HASH_PATH = os.environ['AETHER_FB_HASH_PATH']
 AETHER_FB_URL = os.environ['AETHER_FB_URL']
 # this Aether server is called in firebase
 AETHER_SERVER_ALIAS= os.environ['AETHER_SERVER_ALIAS']
+AETHER_FB_EXPOSE_PORT = os.environ['AETHER_FB_EXPOSE_PORT']
 
 LOG = logging.getLogger(__name__)
 handler = logging.StreamHandler()
@@ -66,6 +69,7 @@ class FirebaseConsumer(object):
         self.subscribe_to_config()
         signal.signal(signal.SIGTERM, self.kill)
         signal.signal(signal.SIGINT, self.kill)
+        self.serve_healthcheck(AETHER_FB_EXPOSE_PORT)
         self.run()
 
     def authenticate(self):
@@ -86,6 +90,7 @@ class FirebaseConsumer(object):
     def kill(self, *args, **kwargs):
         self.killed = True
         LOG.debug('Firebase Consumer caught kill signal.')
+        self.healthcheck.stop()
         self.kill_children_dict(self.cfs_workers)
         self.kill_children_dict(self.rtdb_workers)
 
@@ -99,6 +104,10 @@ class FirebaseConsumer(object):
         for x in range(dur):
             if not self.killed:
                 sleep(1)        
+
+    def serve_healthcheck(self, port):
+        self.healthcheck = HealthcheckServer(port)
+        self.healthcheck.start()
 
     def handle_config_update(self, event=None):
         path = event.path
@@ -126,6 +135,8 @@ class FirebaseConsumer(object):
         for name, config in rtdb.items():
             self.rtdb_workers[name] = RTDBWorker(name, config, self)
 
+    def run(self):
+        pass
 
 class FirebaseWorker(object):
 

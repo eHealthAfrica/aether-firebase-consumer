@@ -9,6 +9,8 @@ services:
       - aether
     volumes:
       - ${AETHER_FB_CREDENTIAL_PATH}:/opt/firebase/cert.json
+    ports:
+      - "${AETHER_FB_EXPOSE_PORT}:${AETHER_FB_EXPOSE_PORT}"
 
 networks:
   aether:

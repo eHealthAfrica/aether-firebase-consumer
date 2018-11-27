@@ -14,6 +14,7 @@ services:
      - AETHER_FB_URL=${AETHER_FB_URL}
      - AETHER_SERVER_ALIAS=${AETHER_SERVER_ALIAS}
      - AETHER_FB_HASH_PATH=${AETHER_FB_HASH_PATH}
+     - AETHER_FB_EXPOSE_PORT=${AETHER_FB_EXPOSE_PORT}
     volumes:
      - ./firebase/conf:/code/conf
     command: start
