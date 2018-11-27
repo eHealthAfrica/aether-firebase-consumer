@@ -17,7 +17,7 @@ WORKDIR /code
 
 COPY ./conf/pip /code/conf/pip
 
-RUN pip3 install -f /code/conf/pip/dependencies -r /code/conf/pip/requirements.txt
+RUN pip3 install -r /code/conf/pip/requirements.txt
 
 RUN apt-get purge -y --auto-remove gcc python-dev
 

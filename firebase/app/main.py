@@ -18,14 +18,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from gevent import monkey, sleep
-# need to patch sockets to make requests async
-monkey.patch_all()
-
 import contextlib
 import errno
-import gevent
-from gevent.pool import Pool
 import json
 import logging
 import os
@@ -72,7 +66,6 @@ class FirebaseConsumer(object):
         self.subscribe_to_config()
         signal.signal(signal.SIGTERM, self.kill)
         signal.signal(signal.SIGINT, self.kill)
-        gevent.signal(signal.SIGTERM, self.kill)
         self.run()
 
     def authenticate(self):
@@ -169,7 +162,7 @@ class FirebaseWorker(object):
         self.paused = False
 
     def start(self):
-        self.worker = gevent.spawn(self.run)
+        # self.worker = # Spawn
         pass
 
     def kill(self):
