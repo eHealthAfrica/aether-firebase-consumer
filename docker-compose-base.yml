@@ -7,7 +7,8 @@ services:
     tty: true
     environment:
      - PYTHONUNBUFFERED=1
-     - KAFKA_CONFIG=/code/conf/consumer/kafka.json
+     - CONSUMER_CONFIG_PATH=/code/conf/consumer/consumer.json
+     - KAFKA_CONFIG_PATH=/code/conf/consumer/kafka.json
      - KAFKA_URL=kafka:29092
      - AETHER_CONFIG_FIREBASE_PATH=${AETHER_CONFIG_FIREBASE_PATH}
      - AETHER_FB_CREDENTIAL_PATH=${AETHER_FB_CREDENTIAL_PATH}
@@ -15,6 +16,7 @@ services:
      - AETHER_SERVER_ALIAS=${AETHER_SERVER_ALIAS}
      - AETHER_FB_HASH_PATH=${AETHER_FB_HASH_PATH}
      - AETHER_FB_EXPOSE_PORT=${AETHER_FB_EXPOSE_PORT}
+
     volumes:
      - ./firebase/conf:/code/conf
     command: start

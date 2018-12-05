@@ -62,7 +62,8 @@ class FirebaseConsumer(object):
         signal.signal(signal.SIGTERM, self.kill)
         signal.signal(signal.SIGINT, self.kill)
         self.serve_healthcheck(CSET['AETHER_FB_EXPOSE_PORT'])
-        self.worker = threading.Thread(target=self.run, args=())
+        self.worker = threading.Thread(target=self.run)
+        self.worker.start()
 
     def authenticate(self):
         cred = credentials.Certificate(AETHER_FB_CREDENTIAL_PATH)
@@ -149,7 +150,7 @@ class FirebaseConsumer(object):
             LOG.debug('FirebaseConsumer checking worker status')
             has_workers = False
             for db, workers in self.workers.items():
-                for name, worker in workers:
+                for name, worker in workers.items():
                     LOG.debug(f'child {name} status : {worker.status}')
                     has_workers = True
             if not has_workers:
@@ -164,7 +165,8 @@ class WorkerStatus(enum.Enum):
     PAUSED = 2
     LOCKED = 3
     RECONFIGURE = 4
-    DEAD = 5
+    ERRORED = 5
+    STOPPED = 6
 
 
 class FirebaseWorker(object):
@@ -185,11 +187,13 @@ class FirebaseWorker(object):
 
     def start(self):
         self.status = WorkerStatus.RECONFIGURE
-        self.worker = threading.Thread(target=self.run, args=())
+        LOG.debug(f'Spawning worker thread on {self.name}')
+        self.worker = threading.Thread(target=self.run)
+        self.worker.start()
 
     def run(self):
         LOG.debug(f'Worker thread spawned for {self.name}')
-        while self.status is not WorkerStatus.DEAD:
+        while self.status not in [WorkerStatus.STOPPED, WorkerStatus.ERRORED]:
             try:
                 if self.status is WorkerStatus.RECONFIGURE:
                     LOG.debug(f'Thread for {self.name} is reconfiguring.')
@@ -209,23 +213,24 @@ class FirebaseWorker(object):
                         self.sleep(3)
             except Exception as err:
                 LOG.error(f'Worker thread for {self.name} died!')
-                self.status = WorkerStatus.DEAD
+                self.status = WorkerStatus.ERRORED
                 raise err
-        LOG.debug(f'{self.name} exiting.')
+        LOG.debug(f'{self.name} exiting on status {self.status}.')
 
     def sleep(self, dur):
         for i in range(dur):
             try:
                 if (self.status not in [
-                    WorkerStatus.DEAD,
-                    WorkerStatus.RECONFIGURE
+                    WorkerStatus.ERRORED,
+                    WorkerStatus.RECONFIGURE,
+                    WorkerStatus.STOPPED
                 ]) and (self.parent.killed is not True):
                     sleep(1)
                 else:
                     return
             except AttributeError:  # Parent is likely dead
                 LOG(f'Parent of {self.name} died while child was sleeping. Exiting.')
-                self.status = WorkerStatus.DEAD
+                self.status = WorkerStatus.ERRORED
 
     #
     # Configuration management
@@ -239,14 +244,24 @@ class FirebaseWorker(object):
         LOG.debug(f'{self.name} will configure on next cycle')
 
     # Configuration details may vary for each DB type. Subclasses should override this.
-    def configure(self, config):
+    def configure(self):
         try:
             LOG.debug(f'{self.name} replacing old config hash {self.config_hash}')
         except AttributeError:
             LOG.debug(f'{self.name} does not have a previous config hash')
-        self.config_hash = utils.hash(config)
+        self.config_hash = utils.hash(self.config)
         LOG.debug(f'{self.name} has new config hash: {self.config_hash}')
+        LOG.debug(f'{self.name} has new config: {self.config}')
         self.consumer = self.get_consumer()
+
+    def get_group_name(self):
+        try:
+            tmp = CSET['GROUP_NAME_TEMPLATE']
+            full_options = dict(self.config)
+            full_options['name'] = self.name
+            return tmp.format(**full_options)
+        except Exception:
+            return 'this-is-a-topic-name-fordebugging'
 
     # Get a consumer instance based on the current configuration
     def get_consumer(self):
@@ -255,7 +270,8 @@ class FirebaseWorker(object):
         except AttributeError:
             pass
         args = KSET.copy()
-        args['group_id'] = self.group_name
+        args['group_id'] = self.get_group_name()
+        LOG.debug(f'''{self.name} chose {args['group_id']} for a group_id''')
         try:
             self.consumer = KafkaConsumer(**args)
             self.consumer.subscribe([self.topic])
@@ -263,6 +279,7 @@ class FirebaseWorker(object):
                       (self.index, self.topic, self.group_name))
         except Exception as err:
             LOG.error(f'{self.name} could not create Kafka Consumer : {err}')
+            self.status = WorkerStatus.ERRORED
 
     #
     # Control status mechanisms
@@ -279,7 +296,7 @@ class FirebaseWorker(object):
 
     def kill(self):
         LOG.debug(f'Thread for {self.name} killed.')
-        self.status = WorkerStatus.DEAD
+        self.status = WorkerStatus.STOPPED
 
     #
     # Message Handling
@@ -292,7 +309,7 @@ class FirebaseWorker(object):
                 max_records=self.consumer_max_records)
         except TypeError as ter:  # consumer is likely None
             LOG.error(f'{self.name} died with error {ter}')
-            self.status = WorkerStatus.DEAD
+            self.status = WorkerStatus.ERRORED
 
     # Base implementation of handle messages is only for testing / debugging purposes.
     # Should be overridden in subclasses.
