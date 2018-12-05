@@ -1,0 +1,3 @@
+{
+    "EXCLUDED_TOPICS":  ["__confluent.support.metrics"]
+}

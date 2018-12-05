@@ -20,7 +20,7 @@ show_help() {
 }
 
 test_flake8() {
-    flake8 /code/. --config=/code/conf/extras/flake8.cfg
+    flake8 /code/app/. --config=/code/conf/extras/flake8.cfg
 }
 
 test_unit() {
