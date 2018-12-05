@@ -18,18 +18,17 @@
 # specific language governing permissions and limitations
 # under the License.
 
-import contextlib
-import errno
-import json
+
+import enum
 import logging
-import os
+import threading
+from time import sleep
 import signal
-import sys
 
 from aet.consumer import KafkaConsumer
 import firebase_admin
 from firebase_admin import credentials
-from firebase_admin import firestore as CFS
+# from firebase_admin import firestore as CFS  # TODO on CFS implementation
 from firebase_admin import db as RTDB
 
 from healthcheck import HealthcheckServer
@@ -88,8 +87,8 @@ class FirebaseConsumer(object):
 
     def kill_workers(self):
         for db, workers in self.workers.items():
-            for controller in workers:
-                LOG.debug(f'Signaling shutdown to {controller.name}.')
+            for name, controller in workers.items():
+                LOG.debug(f'Signaling shutdown to {name}')
                 controller.kill()
 
     def safe_sleep(self, dur):
@@ -123,7 +122,7 @@ class FirebaseConsumer(object):
                 .get('_tracked') \
                 .get(db_type) \
                 .get(name)
-            if not name in self.workers[db_type].keys():
+            if name not in self.workers[db_type].keys():
                 LOG.info(f'Config for NEW worker {name} in db {db_type}')
                 if db_type == 'rtdb':
                     self.workers['rtdb'][name] = FirebaseWorker(
@@ -133,10 +132,10 @@ class FirebaseConsumer(object):
                 #     self.workers['cfs'][name] = CFSWorker(name, config, self)
             else:
                 LOG.info(f'Updating config for worker {name} in db {db_type}')
-                workers[db_type][name].update(config)
+                self.workers[db_type][name].update(config)
 
     def initialize_workers(self):
-        cfs = self.config.get('_tracked', {}).get('cfs', {})
+        # cfs = self.config.get('_tracked', {}).get('cfs', {})  # TODO in CFS implementation
         rtdb = self.config.get('_tracked', {}).get('rtdb', {})
         # TODO when CFS is implemented
         # for name, config in cfs.items():
@@ -204,11 +203,11 @@ class FirebaseWorker(object):
                     LOG.debug(f'{self.name} polling for messages on topic {self.topic}')
                     package = self.get_messages()
                     if package:
-                        self.handle_messages(messages)
+                        self.handle_messages(package)
                     else:
                         LOG.debug(f'{self.name} has no new messages')
                         self.sleep(3)
-            except Exception err:
+            except Exception as err:
                 LOG.error(f'Worker thread for {self.name} died!')
                 self.status = WorkerStatus.DEAD
                 raise err
@@ -217,10 +216,10 @@ class FirebaseWorker(object):
     def sleep(self, dur):
         for i in range(dur):
             try:
-                if self.status is not in [
+                if (self.status not in [
                     WorkerStatus.DEAD,
                     WorkerStatus.RECONFIGURE
-                ] and not self.parent.killed:
+                ]) and (self.parent.killed is not True):
                     sleep(1)
                 else:
                     return
@@ -255,13 +254,15 @@ class FirebaseWorker(object):
             self.consumer.close()  # close existing consumer if it exists
         except AttributeError:
             pass
-        args = kafka_config.copy()
+        args = KSET.copy()
         args['group_id'] = self.group_name
         try:
             self.consumer = KafkaConsumer(**args)
             self.consumer.subscribe([self.topic])
-            log.debug('Consumer %s subscribed on topic: %s @ group %s' %
+            LOG.debug('Consumer %s subscribed on topic: %s @ group %s' %
                       (self.index, self.topic, self.group_name))
+        except Exception as err:
+            LOG.error(f'{self.name} could not create Kafka Consumer : {err}')
 
     #
     # Control status mechanisms
@@ -296,7 +297,7 @@ class FirebaseWorker(object):
     # Base implementation of handle messages is only for testing / debugging purposes.
     # Should be overridden in subclasses.
     def handle_messages(self, messages):
-        for parition_key, packages in new_messages.items():
+        for parition_key, packages in messages.items():
             for package in packages:
                 schema = package.get('schema')
                 LOG.debug(f'{self.name} schema: {schema}')
