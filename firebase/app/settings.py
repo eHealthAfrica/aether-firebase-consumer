@@ -77,11 +77,11 @@ def load_config():
         exclude=['kafka_url']
     )
     kafka_required = [
-                      'AETHER_CONFIG_FIREBASE_PATH',
-                      'AETHER_FB_URL',
-                      'AETHER_SERVER_ALIAS',
-                      'AETHER_FB_EXPOSE_PORT'
-                      ]
+        'AETHER_CONFIG_FIREBASE_PATH',
+        'AETHER_FB_URL',
+        'AETHER_SERVER_ALIAS',
+        'AETHER_FB_EXPOSE_PORT'
+    ]
     for i in kafka_required:
         if not kafka_config.get(i):
             raise ValueError(f'{i} is a required entry in the Kafka config or the environment')

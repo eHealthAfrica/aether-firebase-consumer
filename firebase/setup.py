@@ -26,7 +26,8 @@ setup(
     decription='''An Aether Consumer for Firebase CFS and RTDB''',
     version='1.0.0',
     setup_requires=['pytest-runner'],
-    tests_require=['pytest', 'sqlalchemy', 'alembic', 'aet.consumer', 'mock', 'aether_sdk_example', 'firebase-admin'],
+    tests_require=['pytest', 'sqlalchemy', 'alembic', 'aet.consumer',
+                   'mock', 'aether_sdk_example', 'firebase-admin'],
     url='https://github.com/eHealthAfrica/aether-firebase-consumer',
     keywords=['aet', 'aether', 'kafka', 'consumer', 'firebase'],
     classifiers=[]

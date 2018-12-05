@@ -46,7 +46,7 @@ AETHER_FB_CREDENTIAL_PATH = '/opt/firebase/cert.json'  # mounted into volume
 LOG = logging.getLogger(__name__)
 handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter(
-        '%(asctime)s [FIREBASE] %(levelname)-8s %(message)s'))
+    '%(asctime)s [FIREBASE] %(levelname)-8s %(message)s'))
 LOG.addHandler(handler)
 LOG.setLevel(logging.DEBUG)
 
@@ -85,7 +85,7 @@ class FirebaseConsumer(object):
         LOG.debug('Firebase Consumer caught kill signal.')
         self.healthcheck.stop()
         self.kill_workers()
-        
+
     def kill_workers(self):
         for db, workers in self.workers.items():
             for controller in workers:
@@ -96,7 +96,7 @@ class FirebaseConsumer(object):
         # keeps shutdown time low by yielding during sleep and checking if killed.
         for x in range(dur):
             if not self.killed:
-                sleep(1)        
+                sleep(1)
 
     def serve_healthcheck(self, port):
         self.healthcheck = HealthcheckServer(port)
@@ -110,7 +110,7 @@ class FirebaseConsumer(object):
             self.config = data
             LOG.debug('First config set.')
             self.initialize_workers()
-            return 
+            return
         path_parts = [i for i in path.split('/') if i]  # filter blank path elements
         self.update_config(path_parts, data)
         if path_parts[0] is not '_tracked':
@@ -120,20 +120,20 @@ class FirebaseConsumer(object):
             conf_type, db_type, name = path_parts[0:3]
             LOG.debug(f'Propogating change to {db_type} -> {name}')
             config = self.config \
-                                .get('_tracked') \
-                                .get(db_type) \
-                                .get(name)
+                .get('_tracked') \
+                .get(db_type) \
+                .get(name)
             if not name in self.workers[db_type].keys():
                 LOG.info(f'Config for NEW worker {name} in db {db_type}')
                 if db_type == 'rtdb':
-                    self.workers['rtdb'][name] = FirebaseWorker(name, config, self)  # RTDBWorker(name, config, self)
+                    self.workers['rtdb'][name] = FirebaseWorker(
+                        name, config, self)  # RTDBWorker(name, config, self)
                 # TODO when CFS is implemented
                 # else:
                 #     self.workers['cfs'][name] = CFSWorker(name, config, self)
             else:
                 LOG.info(f'Updating config for worker {name} in db {db_type}')
                 workers[db_type][name].update(config)
-
 
     def initialize_workers(self):
         cfs = self.config.get('_tracked', {}).get('cfs', {})
@@ -142,7 +142,8 @@ class FirebaseConsumer(object):
         # for name, config in cfs.items():
         #     self.workers['cfs'][name] = CFSWorker(name, config, self)
         for name, config in rtdb.items():
-            self.workers['rtdb'][name] = FirebaseWorker(name, config, self)  # TODO RTDBWorker(name, config, self)
+            self.workers['rtdb'][name] = FirebaseWorker(
+                name, config, self)  # TODO RTDBWorker(name, config, self)
 
     def run(self):
         while not self.killed:
@@ -217,9 +218,9 @@ class FirebaseWorker(object):
         for i in range(dur):
             try:
                 if self.status is not in [
-                                         WorkerStatus.DEAD,
-                                         WorkerStatus.RECONFIGURE
-                                         ] and not self.parent.killed:
+                    WorkerStatus.DEAD,
+                    WorkerStatus.RECONFIGURE
+                ] and not self.parent.killed:
                     sleep(1)
                 else:
                     return
@@ -231,7 +232,7 @@ class FirebaseWorker(object):
     # Configuration management
     #
 
-    #Handle Updates from parent
+    # Handle Updates from parent
     def update(self, config):
         LOG.debug(f'Update to config in {self.name}')
         self.config = config
@@ -275,8 +276,6 @@ class FirebaseWorker(object):
     def lock(self):
         self.status = WorkerStatus.LOCKED
 
-    
-
     def kill(self):
         LOG.debug(f'Thread for {self.name} killed.')
         self.status = WorkerStatus.DEAD
@@ -288,13 +287,13 @@ class FirebaseWorker(object):
     def get_messages(self):
         try:
             return self.consumer.poll_and_deserialize(
-                    timeout_ms=self.consumer_timeout,
-                    max_records=self.consumer_max_records)
+                timeout_ms=self.consumer_timeout,
+                max_records=self.consumer_max_records)
         except TypeError as ter:  # consumer is likely None
             LOG.error(f'{self.name} died with error {ter}')
             self.status = WorkerStatus.DEAD
 
-    # Base implementation of handle messages is only for testing / debugging purposes. 
+    # Base implementation of handle messages is only for testing / debugging purposes.
     # Should be overridden in subclasses.
     def handle_messages(self, messages):
         for parition_key, packages in new_messages.items():
@@ -304,11 +303,11 @@ class FirebaseWorker(object):
                 messages = package.get('messages')
                 LOG.debug(f'{self.name} messages #{len(messages)}')
                 # for x, msg in enumerate(messages):
-                #     pass                       
+                #     pass
 
 
 class RTDBWorker(FirebaseWorker):
-    
+
     def configure(self):
         pass
 
@@ -320,7 +319,7 @@ class RTDBWorker(FirebaseWorker):
 
 
 class CFSWorker(FirebaseWorker):
-    
+
     def configure(self):
         pass
 
@@ -329,6 +328,7 @@ class CFSWorker(FirebaseWorker):
 
     def submit(self, msg):
         pass
+
 
 if __name__ == "__main__":
     viewer = FirebaseConsumer()

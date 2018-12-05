@@ -28,7 +28,7 @@ import sys
 LOG = logging.getLogger(__name__)
 handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter(
-        '%(asctime)s [FIREBASE] %(levelname)-8s %(message)s'))
+    '%(asctime)s [FIREBASE] %(levelname)-8s %(message)s'))
 LOG.addHandler(handler)
 LOG.setLevel(logging.DEBUG)
 

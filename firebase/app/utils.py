@@ -25,6 +25,7 @@ import json
 # Both for ensuring consistency in Kafka/FB
 # and detecting config changes locally.
 
+
 def hash(msg):
     sorted_msg = json.dumps(msg, sort_keys=True)
     encoded_msg = sorted_msg.encode('utf-8')
@@ -34,8 +35,10 @@ def hash(msg):
 # These operations are for dealing with nested dictionaries
 # Primarily for getting and setting config data
 
-# _dict -> {"a":{"b":{"c":1}}} keys -> ["a","b"] 
-# = {"c":1} 
+# _dict -> {"a":{"b":{"c":1}}} keys -> ["a","b"]
+# = {"c":1}
+
+
 def get_nested(_dict, keys):
     if len(keys) > 1:
         return get_nested(_dict[keys[0]], keys[1:])
@@ -44,6 +47,8 @@ def get_nested(_dict, keys):
 
 # _dict -> {"a":{"b":{"c":1}}} keys -> ["a","b"], value -> "new"
 # =  {"a":{"b": "new"}}
+
+
 def replace_nested(_dict, keys, value):
     if len(keys) > 1:
         _dict[keys[0]] = replace_nested(_dict[keys[0]], keys[1:], value)
