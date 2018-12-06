@@ -335,7 +335,7 @@ class FirebaseWorker(object):
             return self.consumer.poll_and_deserialize(
                 timeout_ms=self.consumer_timeout,
                 max_records=self.consumer_max_records)
-        except TypeError as ter:  # consumer is likely None
+        except AttributeError as ter:  # consumer is likely None
             LOG.error(f'{self.name} died with error {ter}')
             self.status = WorkerStatus.ERRORED
 
@@ -394,14 +394,14 @@ class RTDBWorker(FirebaseWorker):
             self.status = WorkerStatus.LOCKED
             self.sync_mode = new_mode
             return
-        self.consumer = self.get_consumer()
+        self.get_consumer()
         self.status = WorkerStatus.RUNNING
 
     def handle_messages(self, messages):
         msg_iter = super().handle_messages(messages)
         for schema, messages in msg_iter:
             for msg in messages:
-                submit(msg)  # RTDB cares not for schema enforcement
+                self.submit(msg)  # RTDB cares not for schema enforcement
 
     def submit(self, msg):
         try:
@@ -427,7 +427,7 @@ class CFSWorker(FirebaseWorker):
 
     def configure(self):
         super().configure()
-        self.consumer = self.get_consumer()
+        self.get_consumer()
         self.status = WorkerStatus.RUNNING
 
     def handle_messages(self, messages):
