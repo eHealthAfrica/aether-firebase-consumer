@@ -40,7 +40,6 @@ KSET = settings.get_kafka_config()
 
 # credentials to the db
 AETHER_FB_CREDENTIAL_PATH = '/opt/firebase/cert.json'  # mounted into volume
-# AETHER_FB_HASH_PATH = CSET['AETHER_FB_HASH_PATH'] # TODO
 
 LOG = logging.getLogger(__name__)
 handler = logging.StreamHandler()
@@ -48,6 +47,21 @@ handler.setFormatter(logging.Formatter(
     '%(asctime)s [FIREBASE] %(levelname)-8s %(message)s'))
 LOG.addHandler(handler)
 LOG.setLevel(logging.DEBUG)
+
+#
+# Custom Exceptions
+#
+
+
+class MessageHandlingException(Exception):
+    # A simple way to handle the variety of expected misbehaviors in message sync
+    # Between Aether and Firebase    
+    pass
+
+
+#
+# Top Level Manager Class
+#
 
 
 class FirebaseConsumer(object):
@@ -185,15 +199,18 @@ class FirebaseWorker(object):
 
     def __init__(self, name, config, parent):
         LOG.debug(f'New worker: {name}')
-        self.consumer_max_records = 10
-        self.consumer_timeout = 1000  # MS
-        self.topic = None
-        self.worker = None
-        self.sync_mode = SyncMode.NONE
-        self.status = WorkerStatus.STARTING
-        self.name = name
-        self.config = config
-        self.parent = parent
+        self.consumer_max_records = 10              # Max records to request from Kafka in a batch
+        self.consumer_timeout = 1000                # kafka request timeout in MS
+        self.topic = None                           # topic name for subscription
+        self.worker = None                          # worker thread for run() operation
+        self.sync_mode = SyncMode.NONE              # Sync operating mode for this consumer
+        # The path in RTDB where we keep our hashes
+        self.hash_path = CSET['AETHER_FB_HASH_PATH']
+        self.target_path = None                     # Current Target base path in RTDB / CFS
+        self.status = WorkerStatus.STARTING         # Current operating condition
+        self.name = name                            # Name of this consumer
+        self.config = config                        # Current configuration
+        self.parent = parent                        # Parent consumer manager
         self.start()
 
     # Main loop control
@@ -286,8 +303,7 @@ class FirebaseWorker(object):
         try:
             self.consumer = KafkaConsumer(**args)
             self.consumer.subscribe([self.topic])
-            LOG.debug('Consumer %s subscribed on topic: %s @ group %s' %
-                      (self.index, self.topic, self.group_name))
+            LOG.debug(f'{self.name} subscribed to topic: {self.topic}')
         except Exception as err:
             LOG.error(f'{self.name} could not create Kafka Consumer : {err}')
             self.status = WorkerStatus.ERRORED
@@ -323,24 +339,45 @@ class FirebaseWorker(object):
             LOG.error(f'{self.name} died with error {ter}')
             self.status = WorkerStatus.ERRORED
 
-    # Base implementation of handle messages is only for testing / debugging purposes.
-    # Should be overridden in subclasses.
+    # Base implementation of handle messages
+    # Must be subclassed for individual message/ schema handling
     def handle_messages(self, messages):
         for parition_key, packages in messages.items():
             for package in packages:
                 schema = package.get('schema')
-                LOG.debug(f'{self.name} schema: {schema}')
                 messages = package.get('messages')
-                LOG.debug(f'{self.name} messages #{len(messages)}')
-                # for x, msg in enumerate(messages):
-                #     pass
+                yield(schema, messages)
+
+    def get_message_id(self, msg):
+        try:
+            return msg['id']    
+        except KeyError:
+            raise MessageHandlingException(f'Message in {self.name}' +
+                f' does not have an ID, cannot send to Firebase')
+
+    def check_remote_msg_needs_update(self, _id, msg):
+        new_hash = utils.hash(msg)
+        old_hash = self.get_remote_hash(_id)
+        if not old_hash:
+            return
+        if new_hash == old_hash:
+            raise MessageHandlingException(f'Msg in {self.name} with id :' +
+                f' {_id} is already consistent with copy in Firebase')
+
+    def get_remote_hash(self, _id):
+        ref = RTDB.reference(f'{self.hash_path}/{_id}')
+        return ref.get()
+
+    def set_remote_hash(self, _id, hash):
+        ref = RTDB.reference(f'{self.hash_path}/{_id}')
+        ref.set(hash)
 
 
 class SyncMode(enum.Enum):
-    SYNC = 1     # Firebase  <->  Aether
-    FORWARD = 2  # Firebase   ->  Aether
-    CONSUME = 3  # Firebase  <-   Aether
-    NONE = 4     # Firebase   |   Aether
+    SYNC = 1        # Firebase  <->  Aether
+    FORWARD = 2     # Firebase   ->  Aether
+    CONSUME = 3     # Firebase  <-   Aether
+    NONE = 4        # Firebase   |   Aether
 
 
 class RTDBWorker(FirebaseWorker):
@@ -350,6 +387,8 @@ class RTDBWorker(FirebaseWorker):
     def configure(self):
         super().configure()
         new_mode = SyncMode[self.config['sync_mode']]
+        self.target_path = self.config['path']
+        self.topic = self.config['topic']
         if new_mode not in RTDBWorker.allowed_modes:
             LOG.info(f'{self.name} configured for mode {new_mode}. Nothing to be done.')
             self.status = WorkerStatus.LOCKED
@@ -359,11 +398,28 @@ class RTDBWorker(FirebaseWorker):
         self.status = WorkerStatus.RUNNING
 
     def handle_messages(self, messages):
-        pass
+        msg_iter = super().handle_messages(messages)
+        for schema, messages in msg_iter:
+            for msg in messages:
+                submit(msg)  # RTDB cares not for schema enforcement
 
     def submit(self, msg):
-        pass
+        try:
+            _id = self.get_message_id(msg)
+            self.check_remote_msg_needs_update(_id, msg)  # Throws MHE if already consistent
+            msg_hash = utils.hash(msg)
+            # Set new hash
+            self.set_remote_hash(_id, msg_hash)
+            # Set new message
+            ref = RTDB.reference(f'{self.target_path}/{_id}')
+            ref.set(msg)
 
+        except MessageHandlingException as nominal_misbehavior:
+            LOG.debug(nominal_misbehavior)
+        except Exception as bad_err:
+            LOG.error(bad_err)
+            # Try to finish this batch and then pause operation with an error.
+            self.status = WorkerStatus.ERRORED  
 
 class CFSWorker(FirebaseWorker):
 
@@ -375,7 +431,9 @@ class CFSWorker(FirebaseWorker):
         self.status = WorkerStatus.RUNNING
 
     def handle_messages(self, messages):
-        pass
+        msg_iter = super().handle_messages(messages)
+        for schema, messages in msg_iter:
+            pass
 
     def submit(self, msg):
         pass

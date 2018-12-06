@@ -29,7 +29,7 @@ import json
 def hash(msg):
     sorted_msg = json.dumps(msg, sort_keys=True)
     encoded_msg = sorted_msg.encode('utf-8')
-    hash = str(md5(encoded_msg).hexdigest())[:16]
+    hash = str(md5(encoded_msg).hexdigest())[:16]  # 64bit hash 
     return hash
 
 # These operations are for dealing with nested dictionaries
