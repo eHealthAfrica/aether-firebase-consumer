@@ -113,7 +113,7 @@ class FirebaseConsumer(object):
             return
         path_parts = [i for i in path.split('/') if i]  # filter blank path elements
         self.update_config(path_parts, data)
-        if path_parts[0] is not '_tracked':
+        if '_tracked' not in path_parts:
             LOG.debug('Changes do not effect tracked entities')
             return
         else:
@@ -126,8 +126,8 @@ class FirebaseConsumer(object):
             if name not in self.workers[db_type].keys():
                 LOG.info(f'Config for NEW worker {name} in db {db_type}')
                 if db_type == 'rtdb':
-                    self.workers['rtdb'][name] = FirebaseWorker(
-                        name, config, self)  # RTDBWorker(name, config, self)
+                    self.workers['rtdb'][name] = RTDBWorker(
+                        name, config, self)
                 # TODO when CFS is implemented
                 # else:
                 #     self.workers['cfs'][name] = CFSWorker(name, config, self)
@@ -142,8 +142,8 @@ class FirebaseConsumer(object):
         # for name, config in cfs.items():
         #     self.workers['cfs'][name] = CFSWorker(name, config, self)
         for name, config in rtdb.items():
-            self.workers['rtdb'][name] = FirebaseWorker(
-                name, config, self)  # TODO RTDBWorker(name, config, self)
+            self.workers['rtdb'][name] = RTDBWorker(
+                name, config, self)
 
     def run(self):
         while not self.killed:
@@ -152,21 +152,33 @@ class FirebaseConsumer(object):
             for db, workers in self.workers.items():
                 for name, worker in workers.items():
                     LOG.debug(f'child {name} status : {worker.status}')
+                    if not self.worker_is_alive(worker):
+                        self.revive(worker)
                     has_workers = True
             if not has_workers:
                 LOG.debug('FirebaseConsumer has no registered workers.')
             self.safe_sleep(10)
 
+    def worker_is_alive(self, child):
+        LOG.debug(child.worker)
+        return child.worker.isAlive()
+            
+    def revive(self, worker):
+        if worker.status is not WorkerStatus.STOPPED:
+            LOG.info(f'Attempting to revive {worker.name}')
+            worker.start()
+
+
 
 class WorkerStatus(enum.Enum):
 
-    RUNNING = 0
-    STARTING = 1
-    PAUSED = 2
-    LOCKED = 3
-    RECONFIGURE = 4
-    ERRORED = 5
-    STOPPED = 6
+    RUNNING = 0         # Nominal operation
+    STARTING = 1        # Before first configuration
+    PAUSED = 2          # Paused by resumable
+    LOCKED = 3          # Paused and not resumable
+    RECONFIGURE = 4     # Needs configuration on next round
+    ERRORED = 5         # Stopped by an error
+    STOPPED = 6         # Stopped normally
 
 
 class FirebaseWorker(object):
@@ -177,6 +189,7 @@ class FirebaseWorker(object):
         self.consumer_timeout = 1000  # MS
         self.topic = None
         self.worker = None
+        self.sync_mode = SyncMode.NONE
         self.status = WorkerStatus.STARTING
         self.name = name
         self.config = config
@@ -200,7 +213,8 @@ class FirebaseWorker(object):
                     self.configure()
                     continue
                 elif self.status is not WorkerStatus.RUNNING:
-                    LOG.debug(f'Thread for {self.name} paused with status {self.status}')
+                    LOG.debug(f'Thread for {self.name} paused in mode' +
+                              f'{self.sync_mode} with status {self.status}')
                     self.sleep(10)
                     continue
                 else:
@@ -243,7 +257,8 @@ class FirebaseWorker(object):
         self.status = WorkerStatus.RECONFIGURE
         LOG.debug(f'{self.name} will configure on next cycle')
 
-    # Configuration details may vary for each DB type. Subclasses should override this.
+    # Configuration details may vary for each DB type. Subclasses must call
+    # get consumer and set the ready status on their own.
     def configure(self):
         try:
             LOG.debug(f'{self.name} replacing old config hash {self.config_hash}')
@@ -252,23 +267,19 @@ class FirebaseWorker(object):
         self.config_hash = utils.hash(self.config)
         LOG.debug(f'{self.name} has new config hash: {self.config_hash}')
         LOG.debug(f'{self.name} has new config: {self.config}')
-        self.consumer = self.get_consumer()
 
     def get_group_name(self):
-        try:
-            tmp = CSET['GROUP_NAME_TEMPLATE']
-            full_options = dict(self.config)
-            full_options['name'] = self.name
-            return tmp.format(**full_options)
-        except Exception:
-            return 'this-is-a-topic-name-fordebugging'
+        tmp = CSET['GROUP_NAME_TEMPLATE']
+        full_options = dict(self.config)
+        full_options['name'] = self.name
+        return tmp.format(**full_options)
 
     # Get a consumer instance based on the current configuration
     def get_consumer(self):
         try:
             self.consumer.close()  # close existing consumer if it exists
         except AttributeError:
-            pass
+            LOG.debug(f'{self.name} creating first consumer.')
         args = KSET.copy()
         args['group_id'] = self.get_group_name()
         LOG.debug(f'''{self.name} chose {args['group_id']} for a group_id''')
@@ -280,6 +291,7 @@ class FirebaseWorker(object):
         except Exception as err:
             LOG.error(f'{self.name} could not create Kafka Consumer : {err}')
             self.status = WorkerStatus.ERRORED
+            raise err
 
     #
     # Control status mechanisms
@@ -324,10 +336,27 @@ class FirebaseWorker(object):
                 #     pass
 
 
+class SyncMode(enum.Enum):
+    SYNC = 1     # Firebase  <->  Aether
+    FORWARD = 2  # Firebase   ->  Aether
+    CONSUME = 3  # Firebase  <-   Aether
+    NONE = 4     # Firebase   |   Aether
+
+
 class RTDBWorker(FirebaseWorker):
 
+    allowed_modes = [SyncMode.SYNC, SyncMode.CONSUME]
+
     def configure(self):
-        pass
+        super().configure()
+        new_mode = SyncMode[self.config['sync_mode']]
+        if new_mode not in RTDBWorker.allowed_modes:
+            LOG.info(f'{self.name} configured for mode {new_mode}. Nothing to be done.')
+            self.status = WorkerStatus.LOCKED
+            self.sync_mode = new_mode
+            return
+        self.consumer = self.get_consumer()
+        self.status = WorkerStatus.RUNNING
 
     def handle_messages(self, messages):
         pass
@@ -338,8 +367,12 @@ class RTDBWorker(FirebaseWorker):
 
 class CFSWorker(FirebaseWorker):
 
+    allowed_modes = [SyncMode.SYNC, SyncMode.CONSUME]
+
     def configure(self):
-        pass
+        super().configure()
+        self.consumer = self.get_consumer()
+        self.status = WorkerStatus.RUNNING
 
     def handle_messages(self, messages):
         pass

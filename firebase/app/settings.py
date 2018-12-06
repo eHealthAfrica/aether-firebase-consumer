@@ -70,6 +70,18 @@ def load_config():
     KAFKA_CONFIG_PATH = os.environ.get('KAFKA_CONFIG_PATH')
     global consumer_config
     consumer_config = Settings(file_path=CONSUMER_CONFIG_PATH)
+
+    config_required = [
+        'GROUP_NAME_TEMPLATE',
+        'AETHER_CONFIG_FIREBASE_PATH',
+        'AETHER_FB_URL',
+        'AETHER_SERVER_ALIAS',
+        'AETHER_FB_EXPOSE_PORT'
+    ]
+    for i in config_required:
+        if not consumer_config.get(i):
+            raise ValueError(f'{i} is a required entry in the Kafka config or the environment')
+
     global kafka_config
     kafka_config = Settings(
         file_path=KAFKA_CONFIG_PATH,
@@ -77,10 +89,7 @@ def load_config():
         exclude=['kafka_url']
     )
     kafka_required = [
-        'AETHER_CONFIG_FIREBASE_PATH',
-        'AETHER_FB_URL',
-        'AETHER_SERVER_ALIAS',
-        'AETHER_FB_EXPOSE_PORT'
+        'KAFKA_URL'
     ]
     for i in kafka_required:
         if not kafka_config.get(i):
