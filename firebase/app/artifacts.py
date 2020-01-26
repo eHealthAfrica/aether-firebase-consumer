@@ -29,6 +29,13 @@ from typing import (
 
 from confluent_kafka import KafkaException
 
+# Firebase
+import firebase_admin
+from firebase_admin import credentials as firebase_credentials
+# from firebase_admin import firestore as CFS  # TODO on CFS implementation
+# from firebase_admin import db as RTDB
+
+
 # Consumer SDK
 from aet.exceptions import ConsumerHttpException
 from aet.job import BaseJob, JobStatus
@@ -43,6 +50,9 @@ from app import index_handler
 from app.config import get_consumer_config, get_kafka_config
 from app.fixtures import schemas
 
+from app import utils
+from app.helpers import MessageHandlingException
+
 LOG = get_logger('artifacts')
 CONSUMER_CONFIG = get_consumer_config()
 KAFKA_CONFIG = get_kafka_config()
@@ -56,20 +66,78 @@ class FirebaseInstance(BaseResource):
         'test_connection'
     ]
 
-    # session: FirebaseClient = None
+    session: firebase_admin.App = None
 
     @lock
     def get_session(self):
         if self.session:
             return self.session
-        # setup session
+        name = self.self.definition['name']
+        credentials = firebase_credentials(self.self.definition['credential'])
+        self.session = firebase_admin.App(
+            name,
+            credentials,
+        )
+        self.get_rtdb()
+        self.get_cloud_firestore()
         return self.session
+
+    def get_rtdb(self):
+        if self.rtdb:
+            return self.rtdb
+        # get RTDB
+        self.rtdb = firebase_admin.db.reference(app=self.session)
+        return self.rtdb
+        pass
+
+    def get_cloud_firestore(self):
+        if self.cloud_firestore:
+            return self.cloud_firestore
+        self.cloud_firestore = firebase_admin.firestore.client(app=self.session)
+        return self.cloud_firestore
 
     def test_connection(self, *args, **kwargs):
         try:
             pass
         except Exception as err:
             raise ConsumerHttpException(err, 500)
+
+    def check_remote_msg_needs_update(self, _id, msg):
+        new_hash = utils.hash(msg)
+        old_hash = self.get_remote_hash(_id)
+        if not old_hash:
+            return
+        if new_hash == old_hash:
+            raise MessageHandlingException(
+                f'Msg in {self.name} with id :'
+                f' {_id} is already consistent with copy in Firebase')
+
+    def write_rtdb(self, msg):
+        try:
+            rtdb = self.get_rtdb()
+            _id = self.get_message_id(msg)
+            self.check_remote_msg_needs_update(_id, msg)  # Throws MHE if already consistent
+            msg_hash = utils.hash(msg)
+            # Set new hash
+            self.set_remote_hash(_id, msg_hash)
+            # Set new message
+            ref = rtdb.reference(f'{self.target_path}/{_id}')
+            ref.set(msg)
+
+        except MessageHandlingException as nominal_misbehavior:
+            LOG.debug(nominal_misbehavior)
+        except Exception as bad_err:
+            LOG.error(bad_err)
+
+    def get_remote_hash(self, _id):
+        rtdb = self.get_rtdb()
+        ref = rtdb.reference(f'{self.hash_path}/{_id}')
+        return ref.get()
+
+    def set_remote_hash(self, _id, hash):
+        rtdb = self.get_rtdb()
+        ref = rtdb.reference(f'{self.hash_path}/{_id}')
+        ref.set(hash)
 
 
 class Subscription(BaseResource):
