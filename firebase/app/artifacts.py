@@ -156,7 +156,7 @@ class FirebaseJob(BaseJob):
     name = 'job'
     # Any type here needs to be registered in the API as APIServer._allowed_types
     _resources = [FirebaseInstance, Subscription]
-    schema = schemas.FIREBASE_JOB
+    schema = schemas.FB_JOB
 
     public_actions = BaseJob.public_actions + [
         'get_logs',
