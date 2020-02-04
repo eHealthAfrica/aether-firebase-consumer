@@ -28,3 +28,8 @@ from . import *  # get all test assets from test/__init__.py
 # then start the unit tests with
 # `pytest -m unit`
 # to run integration tests / all tests run the test_all.sh script from the /tests directory.
+
+
+@pytest.mark.integration
+def test_two(birdisle_server, create_remote_kafka_assets):
+    assert(True)

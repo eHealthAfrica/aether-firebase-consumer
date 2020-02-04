@@ -44,9 +44,8 @@ from aet.logger import callback_logger, get_logger
 from aet.resource import BaseResource, lock
 
 # Aether python lib
-from aether.python.avro.schema import Node
+# from aether.python.avro.schema import Node
 
-from app import index_handler
 from app.config import get_consumer_config, get_kafka_config
 from app.fixtures import schemas
 
@@ -59,7 +58,7 @@ KAFKA_CONFIG = get_kafka_config()
 
 
 class FirebaseInstance(BaseResource):
-    schema = schemas.ES_INSTANCE
+    schema = schemas.FB_INSTANCE
     jobs_path = '$.firebase'
     name = 'firebase'
     public_actions = BaseResource.public_actions + [
@@ -324,16 +323,16 @@ class FirebaseJob(BaseJob):
 
     def _update_topic(self, topic, schema: Mapping[Any, Any]):
         self.log.debug(f'{self.tenant} is updating topic: {topic}')
-        subscription = self._job_subscription_for_topic(topic)
-        node: Node = Node(schema)
+        # subscription = self._job_subscription_for_topic(topic)
+        # node: Node = Node(schema)
         self.log.debug('getting index')
-        es_index = index_handler.get_es_index_from_subscription(
-            subscription.definition.get('es_options'),
-            name=self._name_from_topic(topic),
-            tenant=self.tenant.lower(),
-            schema=node
-        )
-        self.log.debug(f'index {es_index}')
+        # es_index = index_handler.get_es_index_from_subscription(
+        #     subscription.definition.get('es_options'),
+        #     name=self._name_from_topic(topic),
+        #     tenant=self.tenant.lower(),
+        #     schema=node
+        # )
+        # self.log.debug(f'index {es_index}')
         # TODO Alias topic -> Firebase Type name
         # alias_request = subscription.definition.get('fb_options', {}).get('alias_name')
         # if alias_request:

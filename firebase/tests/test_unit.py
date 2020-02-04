@@ -20,6 +20,7 @@
 
 from . import *  # get all test assets from test/__init__.py
 
+
 # Test Suite contains both unit and integration tests
 # Unit tests can be run on their own from the root directory
 # enter the bash environment for the version of python you want to test
@@ -28,3 +29,25 @@ from . import *  # get all test assets from test/__init__.py
 # then start the unit tests with
 # `pytest -m unit`
 # to run integration tests / all tests run the test_all.sh script from the /tests directory.
+
+
+@pytest.mark.unit
+def test_one(birdisle_server):
+    assert(True)
+
+
+@pytest.mark.unit
+def test_get_reference(rtdb):
+    ref = rtdb.path('/some/path')
+    assert(ref.get() is None)
+    test_value = 't_val'
+    ref.set(test_value)
+    assert(ref.get() == test_value)
+
+
+@pytest.mark.unit
+def test_get_reference(cfs):
+    ref = cfs.collection(u'test').document(u'adoc')
+    test_value = {'key': 't_val'}
+    ref.set(test_value)
+    assert(ref.get() == test_value)

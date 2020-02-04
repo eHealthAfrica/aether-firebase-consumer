@@ -18,7 +18,12 @@
 # specific language governing permissions and limitations
 # under the License.
 #
+
 set -Eeuo pipefail
 
+# On Exit
+trap 'docker-compose -f docker-compose-test.yml down' EXIT
 
-docker-compose run example-consumer test_unit
+docker-compose -f docker-compose-test.yml up -d emu
+docker-compose -f docker-compose-test.yml build >> /dev/null
+docker-compose -f docker-compose-test.yml run consumer-test test_unit

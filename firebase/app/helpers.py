@@ -21,6 +21,9 @@
 
 import enum
 
+from firebase_admin.db import reference as realtime
+from firebase_admin.firestore import client as cfs
+
 
 class MessageHandlingException(Exception):
     # A simple way to handle the variety of expected misbehaviors in message sync
@@ -33,3 +36,16 @@ class SyncMode(enum.Enum):
     FORWARD = 2     # Firebase   ->  Aether
     CONSUME = 3     # Firebase  <-   Aether
     NONE = 4        # Firebase   |   Aether
+
+
+class RTDB(object):
+
+    def __init__(self, app):
+        self.app = app
+
+    def path(self, path):
+        return realtime(path, app=self.app)
+
+
+def Firestore(app):
+    return cfs(app)

@@ -8,8 +8,13 @@
 #                                                                              					#
 #################################################################################################
 
+# Consumer
 aet.consumer
+aether.python
 firebase-admin
+
+# Tests
+birdisle
 flake8
 mock
 pytest

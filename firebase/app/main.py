@@ -55,7 +55,7 @@ LOG.setLevel(logging.DEBUG)
 
 class MessageHandlingException(Exception):
     # A simple way to handle the variety of expected misbehaviors in message sync
-    # Between Aether and Firebase    
+    # Between Aether and Firebase
     pass
 
 
@@ -176,12 +176,11 @@ class FirebaseConsumer(object):
     def worker_is_alive(self, child):
         LOG.debug(child.worker)
         return child.worker.isAlive()
-            
+
     def revive(self, worker):
         if worker.status is not WorkerStatus.STOPPED:
             LOG.info(f'Attempting to revive {worker.name}')
             worker.start()
-
 
 
 class WorkerStatus(enum.Enum):
@@ -350,9 +349,10 @@ class FirebaseWorker(object):
 
     def get_message_id(self, msg):
         try:
-            return msg['id']    
+            return msg['id']
         except KeyError:
-            raise MessageHandlingException(f'Message in {self.name}' +
+            raise MessageHandlingException(
+                f'Message in {self.name}' +
                 f' does not have an ID, cannot send to Firebase')
 
     def check_remote_msg_needs_update(self, _id, msg):
@@ -361,7 +361,8 @@ class FirebaseWorker(object):
         if not old_hash:
             return
         if new_hash == old_hash:
-            raise MessageHandlingException(f'Msg in {self.name} with id :' +
+            raise MessageHandlingException(
+                f'Msg in {self.name} with id :' +
                 f' {_id} is already consistent with copy in Firebase')
 
     def get_remote_hash(self, _id):
@@ -419,7 +420,8 @@ class RTDBWorker(FirebaseWorker):
         except Exception as bad_err:
             LOG.error(bad_err)
             # Try to finish this batch and then pause operation with an error.
-            self.status = WorkerStatus.ERRORED  
+            self.status = WorkerStatus.ERRORED
+
 
 class CFSWorker(FirebaseWorker):
 

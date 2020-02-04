@@ -23,7 +23,7 @@ setup(
     name='aether_firebase_consumer',
     author='Shawn Sarwar',
     author_email="shawn.sarwar@ehealthafrica.org",
-    decription='''An Aether Consumer for Firebase CFS and RTDB''',
+    description='''An Aether Consumer for Firebase CFS and RTDB''',
     version='1.0.0',
     setup_requires=['pytest-runner'],
     tests_require=['pytest', 'sqlalchemy', 'alembic', 'aet.consumer',

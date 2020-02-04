@@ -20,11 +20,20 @@
 
 
 import json
+import mock
 import pytest
+from time import sleep
 from uuid import uuid4
 
 import birdisle
 import birdisle.redis
+
+import firebase_admin
+import firebase_admin.credentials
+from firebase_admin.credentials import ApplicationDefault
+from firebase_admin.db import reference as RTDB
+from firebase_admin.exceptions import UnavailableError
+from google.cloud.firestore_v1.client import Client as CFS
 from spavro.schema import parse
 
 from aet.kafka_utils import (
@@ -44,6 +53,10 @@ from aether.python.avro import generation
 
 
 from app import config, consumer
+from app.helpers import RTDB, Firestore
+
+CONSUMER_CONFIG = config.consumer_config
+KAFKA_CONFIG = config.kafka_config
 
 
 LOG = get_logger('FIXTURE')
@@ -52,12 +65,67 @@ LOG = get_logger('FIXTURE')
 kafka_server = "kafka-test:29099"
 
 
+project_name_rtdb = 'rtdb_test_app'
+project_name_cfs = 'cfs_test_app'
+rtdb_local = CONSUMER_CONFIG.get('FIREBASE_DATABASE_EMULATOR_HOST')
+cfs_local = CONSUMER_CONFIG.get('FIREBASE_EMULATOR_HOST')
+rtdb_name = 'testdb'
+rtdb_url = f'http://{rtdb_local}/'
+cfs_url = f'http://{cfs_local}/'
+rtdb_ns = f'?ns={rtdb_name}'
+rtdb_fq = rtdb_url + rtdb_ns
+LOG.info(rtdb_fq)
+
+
 # pick a random tenant for each run so we don't need to wipe ES.
 TS = str(uuid4()).replace('-', '')[:8]
 TENANT = f'TEN{TS}'
 TEST_TOPIC = 'es_test_topic'
 
 GENERATED_SAMPLES = {}
+
+
+# taken from the CloudFirestore
+def _make_credentials():
+    import google.auth.credentials
+    return mock.Mock(spec=google.auth.credentials.Credentials)
+
+@pytest.fixture(scope='session')
+def rtdb_options():
+    yield {
+        'databaseURL': rtdb_fq,
+        'projectID': project_name_rtdb
+    }
+
+
+@pytest.fixture(scope='session')
+def cfs_options():
+    yield {
+        'databaseURL': cfs_local,
+        # 'projectID': project_name_cfs
+    }
+
+
+@pytest.fixture(scope='session')
+def rtdb(rtdb_options):
+    app = firebase_admin.initialize_app(
+        name=project_name_rtdb,
+        credential=ApplicationDefault(),
+        options=rtdb_options
+    )
+    yield RTDB(app)
+
+
+@pytest.fixture(scope='session')
+def cfs(cfs_options):
+    # app = firebase_admin.initialize_app(
+    #     name=project_name_cfs,
+    #     credential=ApplicationDefault(),
+    #     options=cfs_options
+    # )
+    # yield Firestore(app)
+    # 'my-project',
+    return CFS('quark', credentials=_make_credentials())
 
 
 @pytest.mark.unit
@@ -85,42 +153,46 @@ def create_remote_kafka_assets(request, sample_generator, *args):
     # @mark annotation does not work with autouse=True.
     if 'integration' not in request.config.invocation_params.args:
         LOG.debug(f'NOT creating Kafka Assets')
-        # return
-    LOG.debug(f'Creating Kafka Assets')
-    kafka_security = config.get_kafka_admin_config()
-    kadmin = get_admin_client(kafka_security)
-    new_topic = f'{TENANT}.{TEST_TOPIC}'
-    create_topic(kadmin, new_topic)
-    GENERATED_SAMPLES[new_topic] = []
-    producer = get_producer(kafka_security)
-    schema = parse(json.dumps(ANNOTATED_SCHEMA))
-    for subset in sample_generator(max=100, chunk=10):
-        GENERATED_SAMPLES[new_topic].extend(subset)
-        produce(subset, schema, new_topic, producer)
-    yield None  # end of work before clean-up
-    LOG.debug(f'deleting topic: {new_topic}')
-    delete_topic(kadmin, new_topic)
+        yield None
+    else:
+        LOG.debug(f'Creating Kafka Assets')
+        kafka_security = config.get_kafka_admin_config()
+        kadmin = get_admin_client(kafka_security)
+        new_topic = f'{TENANT}.{TEST_TOPIC}'
+        create_topic(kadmin, new_topic)
+        GENERATED_SAMPLES[new_topic] = []
+        producer = get_producer(kafka_security)
+        schema = parse(json.dumps(ANNOTATED_SCHEMA))
+        for subset in sample_generator(max=100, chunk=10):
+            GENERATED_SAMPLES[new_topic].extend(subset)
+            produce(subset, schema, new_topic, producer)
+        yield None  # end of work before clean-up
+        LOG.debug(f'deleting topic: {new_topic}')
+        delete_topic(kadmin, new_topic)
+
+
+# raises UnavailableError
+def check_app_alive(rtdb):
+    ref = rtdb.path('some/path')
+    return ref.get()
 
 
 @pytest.fixture(scope='session', autouse=True)
-def check_local_firebase_readyness(request, *args):
+def check_local_firebase_readyness(request, rtdb, *args):
     # @mark annotation does not work with autouse=True
-    if 'integration' not in request.config.invocation_params.args:
-        LOG.debug(f'NOT Checking for LocalFirebase')
-        return
+    # if 'integration' not in request.config.invocation_params.args:
+    #     LOG.debug(f'NOT Checking for LocalFirebase')
+    #     return
     LOG.debug('Waiting for Firebase')
-    # CC = config.get_consumer_config()
-    # url = CC.get('elasticsearch_url')
-    # user = CC.get('elasticsearch_user')
-    # password = CC.get('elasticsearch_password')
-    # for x in range(120):
-    #     try:
-    #         res = requests.get(f'http://{url}', auth=(user, password))
-    #         res.raise_for_status()
-    #         return
-    #     except Exception:
-    #         sleep(.5)
-    raise TimeoutError('Could not connect to elasticsearch for integration test')
+    for x in range(30):
+        try:
+            check_app_alive(rtdb)
+            return
+        except UnavailableError as err:
+            LOG.info(f'waiting for fb...')
+            sleep(1)
+
+    raise TimeoutError('Could not connect to Firebase for integration test')
 
 
 @pytest.mark.unit
