@@ -33,6 +33,7 @@ import firebase_admin.credentials
 from firebase_admin.credentials import ApplicationDefault
 from firebase_admin.db import reference as RTDB
 from firebase_admin.exceptions import UnavailableError
+from google.api_core.exceptions import Unknown as UnknownError
 from google.cloud.firestore_v1.client import Client as CFS
 from spavro.schema import parse
 
@@ -68,10 +69,8 @@ kafka_server = "kafka-test:29099"
 project_name_rtdb = 'rtdb_test_app'
 project_name_cfs = 'cfs_test_app'
 rtdb_local = CONSUMER_CONFIG.get('FIREBASE_DATABASE_EMULATOR_HOST')
-cfs_local = CONSUMER_CONFIG.get('FIREBASE_EMULATOR_HOST')
 rtdb_name = 'testdb'
 rtdb_url = f'http://{rtdb_local}/'
-cfs_url = f'http://{cfs_local}/'
 rtdb_ns = f'?ns={rtdb_name}'
 rtdb_fq = rtdb_url + rtdb_ns
 LOG.info(rtdb_fq)
@@ -88,21 +87,15 @@ GENERATED_SAMPLES = {}
 # taken from the CloudFirestore
 def _make_credentials():
     import google.auth.credentials
-    return mock.Mock(spec=google.auth.credentials.Credentials)
+    # return mock.Mock(spec=google.auth.credentials.Credentials)
+    return google.auth.credentials.AnonymousCredentials()
+
 
 @pytest.fixture(scope='session')
 def rtdb_options():
     yield {
         'databaseURL': rtdb_fq,
         'projectID': project_name_rtdb
-    }
-
-
-@pytest.fixture(scope='session')
-def cfs_options():
-    yield {
-        'databaseURL': cfs_local,
-        # 'projectID': project_name_cfs
     }
 
 
@@ -117,15 +110,8 @@ def rtdb(rtdb_options):
 
 
 @pytest.fixture(scope='session')
-def cfs(cfs_options):
-    # app = firebase_admin.initialize_app(
-    #     name=project_name_cfs,
-    #     credential=ApplicationDefault(),
-    #     options=cfs_options
-    # )
-    # yield Firestore(app)
-    # 'my-project',
-    return CFS('quark', credentials=_make_credentials())
+def cfs():
+    return CFS(project_name_cfs, credentials=_make_credentials())
 
 
 @pytest.mark.unit
@@ -172,13 +158,15 @@ def create_remote_kafka_assets(request, sample_generator, *args):
 
 
 # raises UnavailableError
-def check_app_alive(rtdb):
+def check_app_alive(rtdb, cfs):
     ref = rtdb.path('some/path')
-    return ref.get()
+    # cref = cfs.collection(u'test2').document(u'adoc')
+    LOG.debug(ref.get())
+    # LOG.debug(cref.get())
 
 
 @pytest.fixture(scope='session', autouse=True)
-def check_local_firebase_readyness(request, rtdb, *args):
+def check_local_firebase_readyness(request, rtdb, cfs, *args):
     # @mark annotation does not work with autouse=True
     # if 'integration' not in request.config.invocation_params.args:
     #     LOG.debug(f'NOT Checking for LocalFirebase')
@@ -186,10 +174,12 @@ def check_local_firebase_readyness(request, rtdb, *args):
     LOG.debug('Waiting for Firebase')
     for x in range(30):
         try:
-            check_app_alive(rtdb)
+            check_app_alive(rtdb, cfs)
+            LOG.debug(f'Firebase ready after {x} seconds')
             return
-        except UnavailableError as err:
-            LOG.info(f'waiting for fb...')
+        except (UnavailableError, UnknownError) as err:
+            LOG.info(f'waiting for fb... {type(err)}')
+            LOG.error(err)
             sleep(1)
 
     raise TimeoutError('Could not connect to Firebase for integration test')

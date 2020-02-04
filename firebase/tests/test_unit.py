@@ -37,7 +37,7 @@ def test_one(birdisle_server):
 
 
 @pytest.mark.unit
-def test_get_reference(rtdb):
+def test_get_rtdb_reference(rtdb):
     ref = rtdb.path('/some/path')
     assert(ref.get() is None)
     test_value = 't_val'
@@ -46,8 +46,8 @@ def test_get_reference(rtdb):
 
 
 @pytest.mark.unit
-def test_get_reference(cfs):
+def test_get_cfs_reference(cfs):
     ref = cfs.collection(u'test').document(u'adoc')
-    test_value = {'key': 't_val'}
+    test_value = {u'key': u't_val'}
     ref.set(test_value)
-    assert(ref.get() == test_value)
+    assert(ref.get().to_dict() == test_value)
