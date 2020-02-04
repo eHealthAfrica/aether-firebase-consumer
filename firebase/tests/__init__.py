@@ -20,7 +20,6 @@
 
 
 import json
-import mock
 import pytest
 from time import sleep
 from uuid import uuid4
@@ -34,6 +33,7 @@ from firebase_admin.credentials import ApplicationDefault
 from firebase_admin.db import reference as RTDB
 from firebase_admin.exceptions import UnavailableError
 from google.api_core.exceptions import Unknown as UnknownError
+from google.auth.credentials import AnonymousCredentials
 from google.cloud.firestore_v1.client import Client as CFS
 from spavro.schema import parse
 
@@ -67,7 +67,7 @@ kafka_server = "kafka-test:29099"
 
 
 project_name_rtdb = 'rtdb_test_app'
-project_name_cfs = 'cfs_test_app'
+project_name_cfs = 'cfstestapp'  # NO UNDERSCORES ALLOWED!
 rtdb_local = CONSUMER_CONFIG.get('FIREBASE_DATABASE_EMULATOR_HOST')
 rtdb_name = 'testdb'
 rtdb_url = f'http://{rtdb_local}/'
@@ -82,13 +82,6 @@ TENANT = f'TEN{TS}'
 TEST_TOPIC = 'es_test_topic'
 
 GENERATED_SAMPLES = {}
-
-
-# taken from the CloudFirestore
-def _make_credentials():
-    import google.auth.credentials
-    # return mock.Mock(spec=google.auth.credentials.Credentials)
-    return google.auth.credentials.AnonymousCredentials()
 
 
 @pytest.fixture(scope='session')
@@ -111,7 +104,7 @@ def rtdb(rtdb_options):
 
 @pytest.fixture(scope='session')
 def cfs():
-    return CFS(project_name_cfs, credentials=_make_credentials())
+    return CFS(project_name_cfs, credentials=AnonymousCredentials())
 
 
 @pytest.mark.unit
@@ -160,9 +153,8 @@ def create_remote_kafka_assets(request, sample_generator, *args):
 # raises UnavailableError
 def check_app_alive(rtdb, cfs):
     ref = rtdb.path('some/path')
-    # cref = cfs.collection(u'test2').document(u'adoc')
-    LOG.debug(ref.get())
-    # LOG.debug(cref.get())
+    cref = cfs.collection(u'test2').document(u'adoc')
+    return (ref and cref)
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -177,9 +169,7 @@ def check_local_firebase_readyness(request, rtdb, cfs, *args):
             check_app_alive(rtdb, cfs)
             LOG.debug(f'Firebase ready after {x} seconds')
             return
-        except (UnavailableError, UnknownError) as err:
-            LOG.info(f'waiting for fb... {type(err)}')
-            LOG.error(err)
+        except (UnavailableError, UnknownError):
             sleep(1)
 
     raise TimeoutError('Could not connect to Firebase for integration test')
