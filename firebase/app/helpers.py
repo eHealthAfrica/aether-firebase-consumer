@@ -46,6 +46,29 @@ class SyncMode(enum.Enum):
     NONE = 4        # Firebase   |   Aether
 
 
+# Hash functions
+
+def get_remote_hash(rtdb, _id):
+    ref = rtdb.reference(f'{config.HASH_PATH}/{_id}')
+    return ref.get()
+
+
+def set_remote_hash(rtdb, _id, hash):
+    ref = rtdb.reference(f'{config.HASH_PATH}/{_id}')
+    ref.set(hash)
+
+
+def remote_msg_needs_update(rtdb, _id, msg) -> bool:
+    new_hash = utils.hash(msg)
+    old_hash = get_remote_hash(rtdb, _id)
+    if not old_hash:
+        return True
+    if new_hash == old_hash:
+        return False
+
+
+# RTDB io
+
 class RTDB(object):
 
     def __init__(self, app):
@@ -53,6 +76,21 @@ class RTDB(object):
 
     def reference(self, path):
         return realtime(path, app=self.app)
+
+
+def read_rtdb(rtdb, path):
+    pass
+
+
+def write_rtdb(rtdb, path):
+    pass
+
+
+# CFS Helpers
+
+def Firestore(app) -> firestore.Client:
+    # we use firebase_admin.firestore which takes the app info and returns firestore.Client
+    return cfs(app)
 
 
 class CFSPathType(enum.Enum):
@@ -65,6 +103,10 @@ def _even_len(obj):
 
 
 class CloudFirestorePath(object):
+    # Docs may only be referenced by Collections and vice versa
+    # To build a reference from a string path, /a/b/c/_id we
+    # need to find out what the person wants to reference and build
+    # a chain of CFS .doc & .collection functions
 
     def __init__(self, pathString: str, _type: CFSPathType):
         self.parts = [i for i in pathString.split('/') if i]
@@ -76,8 +118,11 @@ class CloudFirestorePath(object):
         COLLECTION = CFSPathType.COLLECTION
         _type = self._type
         return DOC if (
-            (_type is DOC and not _even_len(self.parts)) or
-            (_type is COLLECTION and _even_len(self.parts))) \
+            (
+                _type is DOC and not _even_len(self.parts)
+            ) or (
+                _type is COLLECTION and _even_len(self.parts)
+            )) \
             else COLLECTION
 
     def _next_type(self, _type: CFSPathType) -> CFSPathType:
@@ -103,52 +148,18 @@ class CloudFirestorePath(object):
 
 
 class CFSCollection(CloudFirestorePath):
+    # used to reference a collection in CFS
     def __init__(self, pathString):
         super().__init__(pathString, CFSPathType.COLLECTION)
 
 
 class CFSDocument(CloudFirestorePath):
+    # used to reference a document in CFS
     def __init__(self, pathString):
         super().__init__(pathString, CFSPathType.DOC)
 
 
-def Firestore(app) -> firestore.Client:
-    # we use firebase_admin.firestore which takes the app info and returns firestore.Client
-    return cfs(app)
-
-
-# Hash functions
-
-def get_remote_hash(rtdb, _id):
-    ref = rtdb.reference(f'{config.HASH_PATH}/{_id}')
-    return ref.get()
-
-
-def set_remote_hash(rtdb, _id, hash):
-    ref = rtdb.reference(f'{config.HASH_PATH}/{_id}')
-    ref.set(hash)
-
-
-def remote_msg_needs_update(rtdb, _id, msg) -> bool:
-    new_hash = utils.hash(msg)
-    old_hash = get_remote_hash(rtdb, _id)
-    if not old_hash:
-        return True
-    if new_hash == old_hash:
-        return False
-
-# RTDB io
-
-
-def read_rtdb(rtdb, path):
-    pass
-
-
-def write_rtdb(rtdb, path):
-    pass
-
-
-# CFS Document io
+# normal CFS interfaces
 
 def read_cfs(cfs, path, doc_id=None):
     if doc_id:
