@@ -32,21 +32,17 @@ from . import *  # get all test assets from test/__init__.py
 
 
 @pytest.mark.unit
-def test_one(birdisle_server):
-    assert(True)
-
-
-@pytest.mark.unit
-def test_get_rtdb_reference(rtdb):
+def test__get_rtdb_core_client_io(rtdb):
     ref = rtdb.reference('/some/path')
     assert(ref.get() is None)
-    test_value = 't_val'
-    ref.set(test_value)
-    assert(ref.get() == test_value)
+    test_values = [1, 1.0, "a", [1, 2, 3], {'a': 'b'}]
+    for test_value in test_values:
+        ref.set(test_value)
+        assert(ref.get() == test_value)
 
 
 @pytest.mark.unit
-def test_get_cfs_core_client_io(cfs):
+def test__get_cfs_core_client_io(cfs):
     ref = cfs.collection(u'test').document(u'adoc')
     test_value = {u'key': u't_val'}
     ref.set(test_value)
@@ -56,9 +52,13 @@ def test_get_cfs_core_client_io(cfs):
 
 
 @pytest.mark.unit
-def test_read_write_path_cfs(cfs):
-    path = '/_aether/entities/a-type'
+def test__read_write_path_cfs(cfs):
+    # must alternate between doc/collection
+    #        c/       d/     c
+    path = '_aether/entity/type-of-entity'
+    #      ID of doc
     _id = 'some-id'
+    #      the doc
     msg = {'hello': 'cfs!'}
     res = helpers.write_cfs(cfs, path, msg, _id)
     assert(res is not None), res

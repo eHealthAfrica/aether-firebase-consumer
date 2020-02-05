@@ -228,8 +228,8 @@ SUBSCRIPTION = '''
       "title": "The Firebase Options Schema",
       "required": [],
       "properties": {
-        "alias_name": {
-          "$id": "#/properties/es_options/properties/alias_name",
+        "target_path": {
+          "$id": "#/properties/es_options/properties/target_path",
           "type": "string",
           "title": "The Alias_name Schema",
           "default": "",

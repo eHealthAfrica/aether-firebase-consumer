@@ -41,8 +41,8 @@ SUBSCRIPTION = {
         'filter_pass_values': ['operational'],             # what are the passing values?
     },
     'fb_options': {
-        'alias_name': 'test'
-    }
+        'target_path': '_aether/entities/{topic}'  # can use {topic} to set via topic name,
+    }                                              # or hard-code like a/b/c
 }
 
 JOB = {

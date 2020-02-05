@@ -33,6 +33,7 @@ kafka_admin_uses = [
     'sasl.password'
 ]
 
+# Always in RTDB
 HASH_PATH = '_aether/entityHash'
 
 # # Mappings types to ES equivalents

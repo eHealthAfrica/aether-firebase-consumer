@@ -79,103 +79,33 @@ class RTDB(object):
 
 
 def read_rtdb(rtdb, path):
-    pass
+    _ref = rtdb.reference(path)
+    return _ref.get()
 
 
-def write_rtdb(rtdb, path):
-    pass
+def write_rtdb(rtdb, path, value):
+    _ref = rtdb.reference(path)
+    return _ref.set(value)
 
 
-# CFS Helpers
+# CFS io
 
 def Firestore(app) -> firestore.Client:
     # we use firebase_admin.firestore which takes the app info and returns firestore.Client
     return cfs(app)
 
 
-class CFSPathType(enum.Enum):
-    DOC = 0
-    COLLECTION = 1
-
-
-def _even_len(obj):
-    return (len(obj) % 2 == 0)
-
-
-class CloudFirestorePath(object):
-    # Docs may only be referenced by Collections and vice versa
-    # To build a reference from a string path, /a/b/c/_id we
-    # need to find out what the person wants to reference and build
-    # a chain of CFS .doc & .collection functions
-
-    def __init__(self, pathString: str, _type: CFSPathType):
-        self.parts = [i for i in pathString.split('/') if i]
-        LOG.debug(f'new path: {self.parts}')
-        self._type = _type
-
-    def _first_type(self) -> CFSPathType:
-        DOC = CFSPathType.DOC
-        COLLECTION = CFSPathType.COLLECTION
-        _type = self._type
-        return DOC if (
-            (
-                _type is DOC and not _even_len(self.parts)
-            ) or (
-                _type is COLLECTION and _even_len(self.parts)
-            )) \
-            else COLLECTION
-
-    def _next_type(self, _type: CFSPathType) -> CFSPathType:
-        return CFSPathType.DOC if _type is CFSPathType.COLLECTION else CFSPathType.COLLECTION
-
-    def _next_ref(self, ref, _type, _id):
-        if _type is CFSPathType.COLLECTION:
-            return ref.collection(_id)
-        else:
-            return ref.document(_id)
-
-    def _build_ref(self, cfs):
-        _type = self._first_type()
-        _ref = cfs
-        for _id in self.parts:
-            LOG.debug([_id, _type])
-            _ref = self._next_ref(_ref, _type, _id)
-            _type = self._next_type(_type)
-        return _ref
-
-    def reference(self, cfs):
-        return self._build_ref(cfs)
-
-
-class CFSCollection(CloudFirestorePath):
-    # used to reference a collection in CFS
-    def __init__(self, pathString):
-        super().__init__(pathString, CFSPathType.COLLECTION)
-
-
-class CFSDocument(CloudFirestorePath):
-    # used to reference a document in CFS
-    def __init__(self, pathString):
-        super().__init__(pathString, CFSPathType.DOC)
-
-
-# normal CFS interfaces
-
-def read_cfs(cfs, path, doc_id=None):
+def ref_path(cfs, path, doc_id=None):
     if doc_id:
         path = f'{path}/{doc_id}'
-        _path = CFSDocument(path)
+        return cfs.document(path)
     else:
-        _path = CFSCollection(path)
-    _ref = _path.reference(cfs)
-    return _ref.get().to_dict()
+        return cfs.collection(path)
+
+
+def read_cfs(cfs, path, doc_id=None):
+    return ref_path(cfs, path, doc_id).get().to_dict()
 
 
 def write_cfs(cfs, path, value, doc_id=None):
-    if doc_id:
-        path = f'{path}/{doc_id}'
-        _path = CFSDocument(path)
-    else:
-        _path = CFSCollection(path)
-    _ref = _path.reference(cfs)
-    return _ref.set(value)
+    return ref_path(cfs, path, doc_id).set(value)

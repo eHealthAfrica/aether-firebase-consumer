@@ -32,8 +32,6 @@ from confluent_kafka import KafkaException
 # Firebase
 import firebase_admin
 from firebase_admin import credentials as firebase_credentials
-# from firebase_admin import firestore as CFS  # TODO on CFS implementation
-# from firebase_admin import db as RTDB
 
 
 # Consumer SDK
@@ -42,6 +40,7 @@ from aet.job import BaseJob, JobStatus
 from aet.kafka import KafkaConsumer, FilterConfig, MaskConfig
 from aet.logger import callback_logger, get_logger
 from aet.resource import BaseResource, lock
+from werkzeug.local import LocalProxy
 
 # Aether python lib
 # from aether.python.avro.schema import Node
@@ -50,7 +49,7 @@ from app.config import get_consumer_config, get_kafka_config
 from app.fixtures import schemas
 
 from app import utils
-from app.helpers import MessageHandlingException
+from app import helpers
 
 LOG = get_logger('artifacts')
 CONSUMER_CONFIG = get_consumer_config()
@@ -81,19 +80,22 @@ class FirebaseInstance(BaseResource):
         self.get_cloud_firestore()
         return self.session
 
-    def get_rtdb(self):
+    def get_app(self):
+        # create app from credentials
+        pass
+
+    def get_rtdb(self, app):
         if self.rtdb:
             return self.rtdb
         # get RTDB
-        self.rtdb = firebase_admin.db.reference(app=self.session)
+        self.rtdb = helpers.RTDB(app)
         return self.rtdb
-        pass
 
     def get_cloud_firestore(self):
-        if self.cloud_firestore:
-            return self.cloud_firestore
-        self.cloud_firestore = firebase_admin.firestore.client(app=self.session)
-        return self.cloud_firestore
+        if self.cfs:
+            return self.cfs
+        self.cfs = helpers.Firestore(self.app)
+        return self.cfs
 
     def test_connection(self, *args, **kwargs):
         try:
@@ -123,7 +125,7 @@ class FirebaseInstance(BaseResource):
             ref = rtdb.reference(f'{self.target_path}/{_id}')
             ref.set(msg)
 
-        except MessageHandlingException as nominal_misbehavior:
+        except helpers.MessageHandlingException as nominal_misbehavior:
             LOG.debug(nominal_misbehavior)
         except Exception as bad_err:
             LOG.error(bad_err)
@@ -144,11 +146,59 @@ class Subscription(BaseResource):
     jobs_path = '$.subscription'
     name = 'subscription'
 
+    @classmethod
+    def _validate(cls, definition) -> bool:
+        if not super(Subscription, cls)._validate(definition):
+            return False
+        try:
+            cls._secondary_validation(definition)
+        except AssertionError:
+            return False
+        return True
+
+    @classmethod
+    def _validate_pretty(cls, definition, *args, **kwargs):
+        _res = super(Subscription, cls)._validate_pretty(definition, *args, **kwargs)
+        try:
+            if isinstance(definition, LocalProxy):
+                definition = definition.get_json()
+            cls._secondary_validation(definition)
+        except AssertionError as aer:
+            if _res['valid']:
+                return {
+                    'valid': False,
+                    'validation_errors': [str(aer)]
+                }
+            else:
+                _res['validation_errors'].append(str(aer))
+        return _res
+
+    @classmethod
+    def _secondary_validation(cls, definition):
+        # raises AssertionError on Failure
+        target = definition.get(
+            'fb_options', {}).get(
+            'target_path')
+        if target:
+            assert(len(target.split('/') % 2 != 0)), f'target path"{target}" must be even'
+            wc = '{topic}'
+            if wc in target:
+                _ = target.replace(wc, '')
+                assert('{' not in _), f'extra replacement strings in {target}'
+
     def _handles_topic(self, topic, tenant):
         topic_str = self.definition.topic_pattern
         # remove tenant information
         no_tenant = topic.lstrip(f'{tenant}.')
         return fnmatch.fnmatch(no_tenant, topic_str)
+
+    def _path_for_topic(self, topic):
+        _path = self.definition.get(
+            'fb_options', {}).get(
+            'target_path', '_aether/entities/{topic}')
+        if '{topic}' in _path:
+            _path = _path.format(topic=topic)
+        return _path
 
 
 class FirebaseJob(BaseJob):
@@ -205,7 +255,7 @@ class FirebaseJob(BaseJob):
             self._subscriptions = subs
         return self._subscriptions
 
-    def _job_subscription_for_topic(self, topic):
+    def _job_subscription_for_topic(self, topic) -> Subscription:
         return next(iter(
             sorted([
                 i for i in self._job_subscriptions()
@@ -322,34 +372,7 @@ class FirebaseJob(BaseJob):
         return topic.lstrip(f'{self.tenant}.')
 
     def _update_topic(self, topic, schema: Mapping[Any, Any]):
-        self.log.debug(f'{self.tenant} is updating topic: {topic}')
-        # subscription = self._job_subscription_for_topic(topic)
-        # node: Node = Node(schema)
-        self.log.debug('getting index')
-        # es_index = index_handler.get_es_index_from_subscription(
-        #     subscription.definition.get('es_options'),
-        #     name=self._name_from_topic(topic),
-        #     tenant=self.tenant.lower(),
-        #     schema=node
-        # )
-        # self.log.debug(f'index {es_index}')
-        # TODO Alias topic -> Firebase Type name
-        # alias_request = subscription.definition.get('fb_options', {}).get('alias_name')
-        # if alias_request:
-        #     alias = f'{alias_request}'.lower()
-        # else:
-        #     alias = index_handler.get_alias_from_namespace(node.namespace)
-        # Try to add the indices / ES alias
-        # TODO handle any updates to Firebase Required... ? Any?
-        # updated_firebase = self._topic_update
-        # if updated_firebase:
-        #     self.log.info(
-        #         f'Registered firebase topic change for {self.tenant}'
-        #     )
-        # else:
-        #     self.log.info(
-        #         f'Registered firebase topic did not need update.'
-        #     )
+        self.log.debug(f'{self.tenant} is updating topic: {topic}, firebase does not care...')
 
     def submit(self, doc, topic_name):
         pass
