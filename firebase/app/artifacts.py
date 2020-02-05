@@ -180,11 +180,13 @@ class Subscription(BaseResource):
             'fb_options', {}).get(
             'target_path')
         if target:
-            assert(len(target.split('/') % 2 != 0)), f'target path"{target}" must be even'
+            assert(len(target.split('/')) % 2 != 0), f'target path"{target}" must be even'
             wc = '{topic}'
             if wc in target:
-                _ = target.replace(wc, '')
-                assert('{' not in _), f'extra replacement strings in {target}'
+                no_wc = target.replace(wc, '')
+            else:
+                no_wc = target
+            assert('{' not in no_wc), f'extra replacement strings in {target}'
 
     def _handles_topic(self, topic, tenant):
         topic_str = self.definition.topic_pattern

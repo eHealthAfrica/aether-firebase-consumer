@@ -18,8 +18,11 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from . import *  # get all test assets from test/__init__.py
+from copy import copy
 
+from . import *  # get all test assets from test/__init__.py
+from app.fixtures import examples
+from app.artifacts import Subscription
 
 # Test Suite contains both unit and integration tests
 # Unit tests can be run on their own from the root directory
@@ -29,6 +32,22 @@ from . import *  # get all test assets from test/__init__.py
 # then start the unit tests with
 # `pytest -m unit`
 # to run integration tests / all tests run the test_all.sh script from the /tests directory.
+
+
+@pytest.mark.unit
+def test__subscription_extended_validation():
+    _doc = examples.SUBSCRIPTION
+    assert(Subscription._validate(_doc) is True)
+    assert(Subscription._validate_pretty(_doc)['valid'] is True)
+    bad_paths = [
+        '{illegal}/sub/stitution',
+        'too/short'
+    ]
+    for path in bad_paths:
+        t_doc = copy(_doc)
+        t_doc['fb_options']['target_path'] = path
+        assert(Subscription._validate(t_doc) is False), t_doc['fb_options']['target_path']
+        assert(len(Subscription._validate_pretty(_doc)['validation_errors']) > 0)
 
 
 @pytest.mark.unit
