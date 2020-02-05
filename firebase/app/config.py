@@ -33,6 +33,8 @@ kafka_admin_uses = [
     'sasl.password'
 ]
 
+HASH_PATH = '_aether/entityHash'
+
 # # Mappings types to ES equivalents
 # AVRO_TYPES = [
 #     ('boolean', 'boolean'),

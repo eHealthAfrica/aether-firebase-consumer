@@ -54,7 +54,7 @@ from aether.python.avro import generation
 
 
 from app import config, consumer
-from app.helpers import RTDB, Firestore
+from app import helpers
 
 CONSUMER_CONFIG = config.consumer_config
 KAFKA_CONFIG = config.kafka_config
@@ -99,7 +99,7 @@ def rtdb(rtdb_options):
         credential=ApplicationDefault(),
         options=rtdb_options
     )
-    yield RTDB(app)
+    yield helpers.RTDB(app)
 
 
 @pytest.fixture(scope='session')
@@ -152,7 +152,7 @@ def create_remote_kafka_assets(request, sample_generator, *args):
 
 # raises UnavailableError
 def check_app_alive(rtdb, cfs):
-    ref = rtdb.path('some/path')
+    ref = rtdb.reference('some/path')
     cref = cfs.collection(u'test2').document(u'adoc')
     return (ref and cref)
 

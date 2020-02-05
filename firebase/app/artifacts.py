@@ -101,15 +101,15 @@ class FirebaseInstance(BaseResource):
         except Exception as err:
             raise ConsumerHttpException(err, 500)
 
-    def check_remote_msg_needs_update(self, _id, msg):
-        new_hash = utils.hash(msg)
-        old_hash = self.get_remote_hash(_id)
-        if not old_hash:
-            return
-        if new_hash == old_hash:
-            raise MessageHandlingException(
-                f'Msg in {self.name} with id :'
-                f' {_id} is already consistent with copy in Firebase')
+    # def check_remote_msg_needs_update(self, _id, msg):
+    #     new_hash = utils.hash(msg)
+    #     old_hash = self.get_remote_hash(_id)
+    #     if not old_hash:
+    #         return
+    #     if new_hash == old_hash:
+    #         raise MessageHandlingException(
+    #             f'Msg in {self.name} with id :'
+    #             f' {_id} is already consistent with copy in Firebase')
 
     def write_rtdb(self, msg):
         try:
@@ -128,15 +128,15 @@ class FirebaseInstance(BaseResource):
         except Exception as bad_err:
             LOG.error(bad_err)
 
-    def get_remote_hash(self, _id):
-        rtdb = self.get_rtdb()
-        ref = rtdb.reference(f'{self.hash_path}/{_id}')
-        return ref.get()
+    # def get_remote_hash(self, _id):
+    #     rtdb = self.get_rtdb()
+    #     ref = rtdb.reference(f'{self.hash_path}/{_id}')
+    #     return ref.get()
 
-    def set_remote_hash(self, _id, hash):
-        rtdb = self.get_rtdb()
-        ref = rtdb.reference(f'{self.hash_path}/{_id}')
-        ref.set(hash)
+    # def set_remote_hash(self, _id, hash):
+    #     rtdb = self.get_rtdb()
+    #     ref = rtdb.reference(f'{self.hash_path}/{_id}')
+    #     ref.set(hash)
 
 
 class Subscription(BaseResource):

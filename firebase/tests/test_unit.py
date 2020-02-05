@@ -38,7 +38,7 @@ def test_one(birdisle_server):
 
 @pytest.mark.unit
 def test_get_rtdb_reference(rtdb):
-    ref = rtdb.path('/some/path')
+    ref = rtdb.reference('/some/path')
     assert(ref.get() is None)
     test_value = 't_val'
     ref.set(test_value)
@@ -46,8 +46,21 @@ def test_get_rtdb_reference(rtdb):
 
 
 @pytest.mark.unit
-def test_get_cfs_reference(cfs):
+def test_get_cfs_core_client_io(cfs):
     ref = cfs.collection(u'test').document(u'adoc')
     test_value = {u'key': u't_val'}
     ref.set(test_value)
     assert(ref.get().to_dict() == test_value)
+    ref.delete()
+    assert(ref.get().to_dict() != test_value)
+
+
+@pytest.mark.unit
+def test_read_write_path_cfs(cfs):
+    path = '/_aether/entities/a-type'
+    _id = 'some-id'
+    msg = {'hello': 'cfs!'}
+    res = helpers.write_cfs(cfs, path, msg, _id)
+    assert(res is not None), res
+    cfs_msg = helpers.read_cfs(cfs, path, _id)
+    assert(cfs_msg == msg)
