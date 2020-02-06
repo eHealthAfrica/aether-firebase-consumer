@@ -95,7 +95,7 @@ def Firestore(app) -> firestore.Client:
     return cfs(app)
 
 
-def ref_path(cfs, path, doc_id=None):
+def cfs_ref(cfs, path, doc_id=None):
     if doc_id:
         path = f'{path}/{doc_id}'
         return cfs.document(path)
@@ -104,8 +104,8 @@ def ref_path(cfs, path, doc_id=None):
 
 
 def read_cfs(cfs, path, doc_id=None):
-    return ref_path(cfs, path, doc_id).get().to_dict()
+    return cfs_ref(cfs, path, doc_id).get().to_dict()
 
 
 def write_cfs(cfs, path, value, doc_id=None):
-    return ref_path(cfs, path, doc_id).set(value)
+    return cfs_ref(cfs, path, doc_id).set(value)

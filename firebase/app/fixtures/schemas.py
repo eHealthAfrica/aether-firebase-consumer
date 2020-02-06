@@ -28,7 +28,11 @@ FB_INSTANCE = '''
   "required": [
     "id",
     "name",
-    "url"
+    "url",
+    "credential",
+    "aether_server_alias",
+    "firebase_config_path",
+    "hash_path"
   ],
   "properties": {
     "id": {
@@ -37,7 +41,7 @@ FB_INSTANCE = '''
       "title": "The Id Schema",
       "default": "",
       "examples": [
-        "the id for this resource"
+        "default"
       ],
       "pattern": "^(.*)$"
     },
@@ -47,7 +51,7 @@ FB_INSTANCE = '''
       "title": "The Name Schema",
       "default": "",
       "examples": [
-        "a nice name for this resource"
+        "the default instance"
       ],
       "pattern": "^(.*)$"
     },
@@ -57,27 +61,63 @@ FB_INSTANCE = '''
       "title": "The Url Schema",
       "default": "",
       "examples": [
-        "url of the resource"
+        "local-test"
       ],
       "pattern": "^(.*)$"
     },
-    "user": {
-      "$id": "#/properties/user",
+    "rtdb_project": {
+      "$id": "#/properties/rtdb_project",
       "type": "string",
-      "title": "The User Schema",
+      "title": "The Url Schema",
       "default": "",
       "examples": [
-        "username for auth"
+        "test_rtdb"
       ],
       "pattern": "^(.*)$"
     },
-    "password": {
-      "$id": "#/properties/password",
+    "cfs_project": {
+      "$id": "#/properties/cfs_project",
       "type": "string",
-      "title": "The Password Schema",
+      "title": "The Url Schema",
       "default": "",
       "examples": [
-        "password for auth"
+        "testcfs"
+      ],
+      "pattern": "^(.*)$"
+    },
+    "credential": {
+      "$id": "#/properties/credential",
+      "type": "object",
+      "title": "The Credential Schema",
+      "properties": {}
+    },
+    "aether_server_alias": {
+      "$id": "#/properties/aether_server_alias",
+      "type": "string",
+      "title": "The Aether_server_alias Schema",
+      "default": "",
+      "examples": [
+        "test-server"
+      ],
+      "pattern": "^(.*)$"
+    },
+    "firebase_config_path": {
+      "$id": "#/properties/firebase_config_path",
+      "type": "string",
+      "title": "The Firebase_config_path Schema",
+      "default": "",
+      "examples": [
+        "_aether/rules"
+      ],
+      "pattern": "^(.*)$"
+    },
+    "hash_path": {
+      "$id": "#/properties/hash_path",
+      "type": "string",
+      "title": "The Hash_path Schema",
+      "default": "",
+      "examples": [
+        "_aether/hashes"
       ],
       "pattern": "^(.*)$"
     }
@@ -231,10 +271,21 @@ SUBSCRIPTION = '''
         "target_path": {
           "$id": "#/properties/es_options/properties/target_path",
           "type": "string",
-          "title": "The Alias_name Schema",
+          "title": "Target path in Firebase",
           "default": "",
           "examples": [
             "test"
+          ],
+          "pattern": "^(.*)$"
+        },
+        "sync_mode": {
+          "$id": "#/properties/es_options/properties/sync_mode",
+          "type": "string",
+          "enum": ["forward"],
+          "title": "Mode of transport from Aether -> Firebase",
+          "default": "forward",
+          "examples": [
+            "forward"
           ],
           "pattern": "^(.*)$"
         }

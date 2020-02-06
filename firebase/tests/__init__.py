@@ -66,7 +66,7 @@ LOG = get_logger('FIXTURE')
 kafka_server = "kafka-test:29099"
 
 
-project_name_rtdb = 'rtdb_test_app'
+project_name_rtdb = 'tenant:rtdb_test_app'
 project_name_cfs = 'cfstestapp'  # NO UNDERSCORES ALLOWED!
 rtdb_local = CONSUMER_CONFIG.get('FIREBASE_DATABASE_EMULATOR_HOST')
 rtdb_name = 'testdb'
@@ -93,13 +93,17 @@ def rtdb_options():
 
 
 @pytest.fixture(scope='session')
-def rtdb(rtdb_options):
-    app = firebase_admin.initialize_app(
+def fb_app(rtdb_options):
+    yield firebase_admin.initialize_app(
         name=project_name_rtdb,
         credential=ApplicationDefault(),
         options=rtdb_options
     )
-    yield helpers.RTDB(app)
+
+
+@pytest.fixture(scope='session')
+def rtdb(fb_app):
+    yield helpers.RTDB(fb_app)
 
 
 @pytest.fixture(scope='session')

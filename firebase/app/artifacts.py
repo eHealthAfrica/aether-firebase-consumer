@@ -32,7 +32,8 @@ from confluent_kafka import KafkaException
 # Firebase
 import firebase_admin
 from firebase_admin import credentials as firebase_credentials
-
+from google.cloud import firestore, firestore_v1
+from google.oauth2.credentials import Credentials
 
 # Consumer SDK
 from aet.exceptions import ConsumerHttpException
@@ -48,7 +49,6 @@ from werkzeug.local import LocalProxy
 from app.config import get_consumer_config, get_kafka_config
 from app.fixtures import schemas
 
-from app import utils
 from app import helpers
 
 LOG = get_logger('artifacts')
@@ -64,7 +64,21 @@ class FirebaseInstance(BaseResource):
         'test_connection'
     ]
 
-    session: firebase_admin.App = None
+    app: firebase_admin.App = None
+
+    # @classmethod
+    # def _app_from_definition(tenant, definition):
+    #     credentials = firebase_credentials(definition['credential'])
+    #     credentials = from_authorized_user_info(credentials)
+    #     rtdb_name = f'{tenant}:'
+    #     app = firebase_admin.initialize_app(
+    #         name=project_name_rtdb,
+    #         credential=credentials,
+    #         options={
+    #             'databaseURL': rtdb_fq,
+    #             'projectID': project_name_rtdb
+    #         }
+    #     )
 
     @lock
     def get_session(self):
@@ -72,6 +86,7 @@ class FirebaseInstance(BaseResource):
             return self.session
         name = self.self.definition['name']
         credentials = firebase_credentials(self.self.definition['credential'])
+        credentials = Credentials.from_authorized_user_info(credentials)
         self.session = firebase_admin.App(
             name,
             credentials,
@@ -81,8 +96,9 @@ class FirebaseInstance(BaseResource):
         return self.session
 
     def get_app(self):
-        # create app from credentials
-        pass
+        if self.app:
+            return self.app
+        return self.app
 
     def get_rtdb(self, app):
         if self.rtdb:
@@ -94,7 +110,7 @@ class FirebaseInstance(BaseResource):
     def get_cloud_firestore(self):
         if self.cfs:
             return self.cfs
-        self.cfs = helpers.Firestore(self.app)
+        self.cfs: firestore.Client = helpers.Firestore(self.app)
         return self.cfs
 
     def test_connection(self, *args, **kwargs):
@@ -102,43 +118,6 @@ class FirebaseInstance(BaseResource):
             pass
         except Exception as err:
             raise ConsumerHttpException(err, 500)
-
-    # def check_remote_msg_needs_update(self, _id, msg):
-    #     new_hash = utils.hash(msg)
-    #     old_hash = self.get_remote_hash(_id)
-    #     if not old_hash:
-    #         return
-    #     if new_hash == old_hash:
-    #         raise MessageHandlingException(
-    #             f'Msg in {self.name} with id :'
-    #             f' {_id} is already consistent with copy in Firebase')
-
-    def write_rtdb(self, msg):
-        try:
-            rtdb = self.get_rtdb()
-            _id = self.get_message_id(msg)
-            self.check_remote_msg_needs_update(_id, msg)  # Throws MHE if already consistent
-            msg_hash = utils.hash(msg)
-            # Set new hash
-            self.set_remote_hash(_id, msg_hash)
-            # Set new message
-            ref = rtdb.reference(f'{self.target_path}/{_id}')
-            ref.set(msg)
-
-        except helpers.MessageHandlingException as nominal_misbehavior:
-            LOG.debug(nominal_misbehavior)
-        except Exception as bad_err:
-            LOG.error(bad_err)
-
-    # def get_remote_hash(self, _id):
-    #     rtdb = self.get_rtdb()
-    #     ref = rtdb.reference(f'{self.hash_path}/{_id}')
-    #     return ref.get()
-
-    # def set_remote_hash(self, _id, hash):
-    #     rtdb = self.get_rtdb()
-    #     ref = rtdb.reference(f'{self.hash_path}/{_id}')
-    #     ref.set(hash)
 
 
 class Subscription(BaseResource):
@@ -194,13 +173,19 @@ class Subscription(BaseResource):
         no_tenant = topic.lstrip(f'{tenant}.')
         return fnmatch.fnmatch(no_tenant, topic_str)
 
-    def _path_for_topic(self, topic):
+    def path_for_topic(self, topic):
         _path = self.definition.get(
             'fb_options', {}).get(
             'target_path', '_aether/entities/{topic}')
         if '{topic}' in _path:
             _path = _path.format(topic=topic)
         return _path
+
+    def sync_mode(self) -> helpers.SyncMode:
+        _mode = self.definition.get(
+            'fb_options', {}).get(
+            'sync_mode', 'forward')
+        return helpers.SyncMode[_mode.upper()]
 
 
 class FirebaseJob(BaseJob):
@@ -311,9 +296,16 @@ class FirebaseJob(BaseJob):
 
     def _handle_messages(self, config, messages):
         self.log.debug(f'{self.group_name} | reading {len(messages)} messages')
+        MAX_SUBMIT = 50
         count = 0
+        subs = {}
+        firebase: FirebaseInstance = self._job_firebase()
+        cfs: firestore.Client = firebase.get_cloud_firestore()
+        batch = cfs.batch()
         for msg in messages:
             topic = msg.topic
+            if topic not in subs:
+                subs[topic] = self._job_subscription_for_topic(topic)
             schema = msg.schema
             if schema != self._schemas.get(topic):
                 self.log.info(f'{self._id} Schema change on {topic}')
@@ -321,12 +313,17 @@ class FirebaseJob(BaseJob):
                 self._schemas[topic] = schema
             else:
                 self.log.debug('Schema unchanged.')
-            self.submit(msg.value, topic)
+            self.add_message(msg.value, topic, subs[topic], batch)
             count += 1
+            if (count % MAX_SUBMIT) == 0:
+                batch.commit()
+                batch = cfs.batch()
+        batch.commit()
         self.log.info(f'processed {count} {topic} docs in tenant {self.tenant}')
 
     # called when a subscription causes a new assignment to be given to the consumer
     def _on_assign(self, *args, **kwargs):
+        # TODO check rules for topic in Firebase
         assignment = args[1]
         for _part in assignment:
             if _part.topic not in self._previous_topics:
@@ -374,10 +371,34 @@ class FirebaseJob(BaseJob):
         return topic.lstrip(f'{self.tenant}.')
 
     def _update_topic(self, topic, schema: Mapping[Any, Any]):
-        self.log.debug(f'{self.tenant} is updating topic: {topic}, firebase does not care...')
+        self.log.debug(f'{self.tenant} is updating topic schema: {topic},'
+                       f' firebase does not care...')
 
-    def submit(self, doc, topic_name):
-        pass
+    def add_message(
+        self,
+        doc,
+        topic: str,
+        sub: Subscription,
+        cfs: firestore.Client,
+        batch: firestore_v1.batch.WriteBatch
+    ):
+        mode: helpers.SyncMode = sub.sync_mode()
+        if mode in [helpers.SyncMode.NONE, helpers.SyncMode.CONSUMER]:
+            # these don't send data to FB
+            return None
+        topic_name = self._name_from_topic(topic)
+        path = sub.path_for_topic(topic_name)
+        if mode is helpers.SyncMode.SYNC:
+            # todo:
+            # check the hash..
+            # needs_update = something()
+            # if needs_update:
+            #     return helpers.cfs_ref(cfs, path, doc.get('id'))
+            pass
+        elif mode is helpers.SyncMode.FORWARD:
+            # we don't care about the hashes
+            ref = helpers.cfs_ref(cfs, path, doc.get('id'))
+            batch.set(ref, doc)
 
     # public
     def list_topics(self, *args, **kwargs):

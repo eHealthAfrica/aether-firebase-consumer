@@ -20,11 +20,15 @@
 
 
 FB_INSTANCE = {
-    'url': 'url-to-firebase',               # URL of FB instance
-    'credential': {'json': 'doc'},          # credentials document
-    'firebase_config_path': '/path',        # path of config in Firebase
-    'aether_server_alias': 'server-name',   # alias of the Aether instance in FB config
-    'hash_path': '/hashes'                  # path of Hashes
+    'id': 'default',
+    'name': 'the default instance',
+    'rtdb_project': 'test-project',
+    'cfs_project': 'cfsproject',
+    'url': 'local-test',                   # URL of FB instance
+    'credential': {'json': 'doc'},              # credentials document
+    'aether_server_alias': 'test-server',       # alias of the Aether instance in FB config
+    'firebase_config_path': '_aether/rules',    # path of config in RTDB
+    'hash_path': '_aether/hashes'               # path of Hashes in RTDB
 }
 
 
@@ -36,18 +40,19 @@ SUBSCRIPTION = {
         'masking_annotation': '@aether_masking',  # schema key for mask level of a field
         'masking_levels': ['public', 'private'],  # classifications
         'masking_emit_level': 'public',           # emit from this level ->
-        'filter_required': True,                 # filter on a message value?
+        'filter_required': False,                 # filter on a message value?
         'filter_field_path': 'operational_status',    # which field?
         'filter_pass_values': ['operational'],             # what are the passing values?
     },
     'fb_options': {
+        'sync_mode': 'forward',                    # enum(forward / sync/ consume)
         'target_path': '_aether/entities/{topic}'  # can use {topic} to set via topic name,
     }                                              # or hard-code like a/b/c
 }
 
 JOB = {
     'id': 'default',
-    'name': 'Default ES Consumer Job',
+    'name': 'Default Firebase Consumer Job',
     'firebase': 'default',
     'subscription': ['sub-test']
 }
