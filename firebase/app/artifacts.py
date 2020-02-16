@@ -31,6 +31,7 @@ from confluent_kafka import KafkaException
 
 # Firebase
 import firebase_admin
+from firebase_admin.exceptions import UnavailableError
 from firebase_admin import credentials as firebase_credentials
 from google.cloud import firestore, firestore_v1
 from google.oauth2.credentials import Credentials
@@ -76,41 +77,38 @@ class FirebaseInstance(BaseResource):
 
     @lock
     def get_session(self):
-        if self.session:
-            return self.session
+        if self.app:
+            return self.app
         name = self.self.definition['name']
         credentials = firebase_credentials(self.self.definition['credential'])
         credentials = Credentials.from_authorized_user_info(credentials)
-        self.session = firebase_admin.App(
+        self.app = firebase_admin.App(
             name,
             credentials,
         )
         self.get_rtdb()
         self.get_cloud_firestore()
-        return self.session
-
-    def get_app(self):
-        if self.app:
-            return self.app
         return self.app
 
     def get_rtdb(self):
         if self.rtdb:
             return self.rtdb
         # get RTDB
-        self.rtdb = helpers.RTDB(self.get_app())
+        self.rtdb = helpers.RTDB(self.get_session())
         return self.rtdb
 
     def get_cloud_firestore(self):
         if self.cfs:
             return self.cfs
-        self.cfs: firestore.Client = helpers.Firestore(self.get_app())
+        self.cfs: firestore.Client = helpers.Firestore(self.get_session())
         return self.cfs
 
     def test_connection(self, *args, **kwargs):
         try:
-            pass
-        except Exception as err:
+            ref = self.get_rtdb().reference('some/path')
+            cref = self.get_cloud_firestore().collection(u'test2').document(u'adoc')
+            return (ref and cref)
+        except UnavailableError as err:
             raise ConsumerHttpException(err, 500)
 
 
@@ -308,7 +306,7 @@ class FirebaseJob(BaseJob):
                 self._schemas[topic] = schema
             else:
                 self.log.debug('Schema unchanged.')
-            self.add_message(msg.value, topic, subs[topic], batch)
+            self.add_message(msg.value, topic, subs[topic], cfs, batch)
             count += 1
             if (count % MAX_SUBMIT) == 0:
                 batch.commit()
@@ -378,7 +376,7 @@ class FirebaseJob(BaseJob):
         batch: firestore_v1.batch.WriteBatch
     ):
         mode: helpers.SyncMode = sub.sync_mode()
-        if mode in [helpers.SyncMode.NONE, helpers.SyncMode.CONSUMER]:
+        if mode in [helpers.SyncMode.NONE, helpers.SyncMode.CONSUME]:
             # these don't send data to FB
             return None
         topic_name = self._name_from_topic(topic)

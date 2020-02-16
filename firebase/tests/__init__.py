@@ -77,6 +77,10 @@ rtdb_name = 'testdb'
 rtdb_url = f'http://{rtdb_local}/'
 rtdb_ns = f'?ns={rtdb_name}'
 rtdb_fq = rtdb_url + rtdb_ns
+_rtdb_options = {
+    'databaseURL': rtdb_fq,
+    'projectID': project_name_rtdb
+}
 LOG.info(rtdb_fq)
 
 
@@ -86,23 +90,29 @@ TENANT = f'TEN{TS}'
 TEST_TOPIC = 'firebase_test_topic'
 
 GENERATED_SAMPLES = {}
+# We don't want to initiate this more than once...
+FIREBASE_APP = None
+
+
+def get_firebase_app():
+    global FIREBASE_APP
+    if not FIREBASE_APP:
+        FIREBASE_APP = firebase_admin.initialize_app(
+            name=project_name_rtdb,
+            credential=ApplicationDefault(),
+            options=_rtdb_options
+        )
+    return FIREBASE_APP
 
 
 @pytest.fixture(scope='session')
 def rtdb_options():
-    yield {
-        'databaseURL': rtdb_fq,
-        'projectID': project_name_rtdb
-    }
+    yield _rtdb_options
 
 
 @pytest.fixture(scope='session')
 def fb_app(rtdb_options):
-    yield firebase_admin.initialize_app(
-        name=project_name_rtdb,
-        credential=ApplicationDefault(),
-        options=rtdb_options
-    )
+    yield get_firebase_app()
 
 
 @pytest.fixture(scope='session')
@@ -141,12 +151,16 @@ def redis_client():
 
 
 def get_local_session(self):
-    if self.session:
-        return self.session
-    self.session = fb_app()
+    if self.app:
+        return self.app
+    self.app = get_firebase_app()
     self.get_rtdb()
     self.get_cloud_firestore()
-    return self.session
+    return self.app
+
+
+def get_local_cfs(self):
+    return CFS(project_name_cfs, credentials=AnonymousCredentials())
 
 
 @pytest.mark.unit
@@ -154,10 +168,11 @@ def get_local_session(self):
 @pytest.fixture(scope='session')
 def LocalConsumer(redis_client):
     with patch.object(artifacts.FirebaseInstance, 'get_session', new=get_local_session):
-        _consumer = consumer.FirebaseConsumer(
-            config.get_consumer_config(), None, redis_instance=redis_client)
-        yield _consumer
-        _consumer.stop()
+        with patch.object(artifacts.FirebaseInstance, 'get_cloud_firestore', new=get_local_cfs):
+            _consumer = consumer.FirebaseConsumer(
+                config.get_consumer_config(), None, redis_instance=redis_client)
+            yield _consumer
+            _consumer.stop()
 
 # @pytest.mark.integration
 @pytest.fixture(scope='session', autouse=True)
