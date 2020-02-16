@@ -31,5 +31,41 @@ from . import *  # get all test assets from test/__init__.py
 
 
 @pytest.mark.integration
-def test_two(birdisle_server, create_remote_kafka_assets):
+def test__setup_consumer(LocalConsumer):
+    print(LocalConsumer)
+
+
+@pytest.mark.integration
+def test__two():
     assert(True)
+
+
+# @pytest.mark.integration
+# def test__consumer_add_firebase(LocalConsumer, RequestClientT1, RequestClientT2):
+#     res = RequestClientT1.post(f'{URL}/firebase/add', json=examples.FB_INSTANCE)
+#     assert(res.json() is True)
+#     res = RequestClientT1.get(f'{URL}/firebase/list')
+#     assert(res.json() != [])
+#     res = RequestClientT2.get(f'{URL}/firebase/list')
+#     assert(res.json() == [])
+#     res = RequestClientT1.delete(f'{URL}/firebase/delete?id=default')
+#     assert(res.json() is True)
+#     res = RequestClientT1.get(f'{URL}/firebase/list')
+#     assert(res.json() == [])
+
+
+@pytest.mark.integration
+def test__consumer_add_job(LocalConsumer, RequestClientT1):
+    res = RequestClientT1.post(f'{URL}/job/add', json=examples.JOB)
+    assert(res.json() is True)
+
+
+@pytest.mark.integration
+def test__consumer_add_subscription(LocalConsumer, RequestClientT1):
+    res = RequestClientT1.post(f'{URL}/firebase/add', json=examples.FB_INSTANCE)
+    assert(res.json() is True)
+    res = RequestClientT1.post(f'{URL}/subscription/add', json=examples.SUBSCRIPTION)
+    assert(res.json() is True)
+    from time import sleep
+    print('sleeping for 30 while stuff happens...')
+    sleep(30)

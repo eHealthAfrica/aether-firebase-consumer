@@ -6,11 +6,11 @@ from app import artifacts
 LOG = get_logger('MAIN')
 
 
-class FirebasesConsumer(BaseConsumer):
+class FirebaseConsumer(BaseConsumer):
 
     def __init__(self, CON_CONF, KAFKA_CONF, redis_instance=None):
         self.job_class = artifacts.FirebaseJob
-        super(FirebasesConsumer, self).__init__(
+        super(FirebaseConsumer, self).__init__(
             CON_CONF,
             KAFKA_CONF,
             self.job_class,

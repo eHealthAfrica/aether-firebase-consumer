@@ -24,6 +24,6 @@ set -Eeuo pipefail
 # On Exit
 trap 'docker-compose -f docker-compose-test.yml down' EXIT
 
-docker-compose -f docker-compose-test.yml up -d emu
+docker-compose -f docker-compose-test.yml up -d emu redis
 docker-compose -f docker-compose-test.yml build >> /dev/null
 docker-compose -f docker-compose-test.yml run consumer-test test_unit

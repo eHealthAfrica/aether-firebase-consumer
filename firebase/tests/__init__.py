@@ -21,11 +21,13 @@
 
 import json
 import pytest
+import os
 from time import sleep
 from uuid import uuid4
+from unittest.mock import patch
 
-import birdisle
-import birdisle.redis
+from redis import Redis
+import requests
 
 import firebase_admin
 import firebase_admin.credentials
@@ -53,7 +55,8 @@ from aet.logger import get_logger
 from aether.python.avro import generation
 
 
-from app import config, consumer
+from app import artifacts, config, consumer
+from app.fixtures import examples
 from app import helpers
 
 CONSUMER_CONFIG = config.consumer_config
@@ -63,6 +66,7 @@ KAFKA_CONFIG = config.kafka_config
 LOG = get_logger('FIXTURE')
 
 
+URL = 'http://localhost:9013'
 kafka_server = "kafka-test:29099"
 
 
@@ -79,7 +83,7 @@ LOG.info(rtdb_fq)
 # pick a random tenant for each run so we don't need to wipe ES.
 TS = str(uuid4()).replace('-', '')[:8]
 TENANT = f'TEN{TS}'
-TEST_TOPIC = 'es_test_topic'
+TEST_TOPIC = 'firebase_test_topic'
 
 GENERATED_SAMPLES = {}
 
@@ -112,23 +116,48 @@ def cfs():
 
 
 @pytest.mark.unit
+@pytest.mark.integration
 @pytest.fixture(scope='session')
-def birdisle_server():
-    password = config.get_consumer_config().get('REDIS_PASSWORD')
-    server = birdisle.Server(f'requirepass {password}')
-    yield server
-    server.close()
+def RequestClientT1():
+    s = requests.Session()
+    s.headers.update({'x-oauth-realm': TENANT})
+    yield s
 
 
 @pytest.mark.unit
 @pytest.fixture(scope='session')
-def Birdisle(birdisle_server):
-    birdisle.redis.LocalSocketConnection.health_check_interval = 0
-    password = config.get_consumer_config().get('REDIS_PASSWORD')
-    r = birdisle.redis.StrictRedis(server=birdisle_server, password=password)
-    r.config_set('notify-keyspace-events', 'KEA')
-    return r
+def RequestClientT2():
+    s = requests.Session()
+    s.headers.update({'x-oauth-realm': f'{TENANT}-2'})
+    yield s
 
+
+@pytest.mark.unit
+@pytest.fixture(scope='session')
+def redis_client():
+    password = os.environ.get('REDIS_PASSWORD')
+    r = Redis(host='redis', password=password)
+    yield r
+
+
+def get_local_session(self):
+    if self.session:
+        return self.session
+    self.session = fb_app()
+    self.get_rtdb()
+    self.get_cloud_firestore()
+    return self.session
+
+
+@pytest.mark.unit
+@pytest.mark.integration
+@pytest.fixture(scope='session')
+def LocalConsumer(redis_client):
+    with patch.object(artifacts.FirebaseInstance, 'get_session', new=get_local_session):
+        _consumer = consumer.FirebaseConsumer(
+            config.get_consumer_config(), None, redis_instance=redis_client)
+        yield _consumer
+        _consumer.stop()
 
 # @pytest.mark.integration
 @pytest.fixture(scope='session', autouse=True)
@@ -148,7 +177,8 @@ def create_remote_kafka_assets(request, sample_generator, *args):
         schema = parse(json.dumps(ANNOTATED_SCHEMA))
         for subset in sample_generator(max=100, chunk=10):
             GENERATED_SAMPLES[new_topic].extend(subset)
-            produce(subset, schema, new_topic, producer)
+            res = produce(subset, schema, new_topic, producer)
+            LOG.debug(res)
         yield None  # end of work before clean-up
         LOG.debug(f'deleting topic: {new_topic}')
         delete_topic(kadmin, new_topic)

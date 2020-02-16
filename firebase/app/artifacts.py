@@ -65,20 +65,14 @@ class FirebaseInstance(BaseResource):
     ]
 
     app: firebase_admin.App = None
+    cfs: firestore.Client = None
+    rtdb: helpers.RTDB = None
 
-    # @classmethod
-    # def _app_from_definition(tenant, definition):
-    #     credentials = firebase_credentials(definition['credential'])
-    #     credentials = from_authorized_user_info(credentials)
-    #     rtdb_name = f'{tenant}:'
-    #     app = firebase_admin.initialize_app(
-    #         name=project_name_rtdb,
-    #         credential=credentials,
-    #         options={
-    #             'databaseURL': rtdb_fq,
-    #             'projectID': project_name_rtdb
-    #         }
-    #     )
+    def __init__(self, tenant, definition, app=None):
+        super().__init__(tenant, definition)
+        # makes unit tests easier
+        if app:
+            self.app = app
 
     @lock
     def get_session(self):
@@ -100,17 +94,17 @@ class FirebaseInstance(BaseResource):
             return self.app
         return self.app
 
-    def get_rtdb(self, app):
+    def get_rtdb(self):
         if self.rtdb:
             return self.rtdb
         # get RTDB
-        self.rtdb = helpers.RTDB(app)
+        self.rtdb = helpers.RTDB(self.get_app())
         return self.rtdb
 
     def get_cloud_firestore(self):
         if self.cfs:
             return self.cfs
-        self.cfs: firestore.Client = helpers.Firestore(self.app)
+        self.cfs: firestore.Client = helpers.Firestore(self.get_app())
         return self.cfs
 
     def test_connection(self, *args, **kwargs):
@@ -209,6 +203,7 @@ class FirebaseJob(BaseJob):
     _indices: dict
     _schemas: dict
     _previous_topics: list
+    _firebase: FirebaseInstance
     _subscriptions: List[Subscription]
 
     def _setup(self):
@@ -228,10 +223,10 @@ class FirebaseJob(BaseJob):
 
     def _job_firebase(self, config=None) -> FirebaseInstance:
         if config:
-            fb = self.get_resources('firebase', config)
+            fb: List[FirebaseInstance] = self.get_resources('firebase', config)
             if not fb:
                 raise ConsumerHttpException('No Firebase associated with Job', 400)
-            self._firebase = fb
+            self._firebase = fb[0]
         return self._firebase
 
     def _job_subscriptions(self, config=None) -> List[Subscription]:
