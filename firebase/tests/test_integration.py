@@ -61,11 +61,16 @@ def test__consumer_add_job(LocalConsumer, RequestClientT1):
 
 
 @pytest.mark.integration
-def test__consumer_add_subscription(LocalConsumer, RequestClientT1):
+def test__consumer_add_subscription(LocalConsumer, RequestClientT1, cfs):
     res = RequestClientT1.post(f'{URL}/firebase/add', json=examples.FB_INSTANCE)
     assert(res.json() is True)
     res = RequestClientT1.post(f'{URL}/subscription/add', json=examples.SUBSCRIPTION)
     assert(res.json() is True)
     from time import sleep
-    print('sleeping for 30 while stuff happens...')
-    sleep(30)
+    _path = examples.SUBSCRIPTION.get('fb_options').get('target_path').format(topic=TEST_TOPIC)
+    for x in range(30):
+        cfs_msg = helpers.read_cfs(cfs, _path)
+        if cfs_msg:
+            LOG.info(cfs_msg)
+            return
+        sleep(1)

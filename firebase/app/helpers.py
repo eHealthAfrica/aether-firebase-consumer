@@ -104,7 +104,10 @@ def cfs_ref(cfs, path, doc_id=None):
 
 
 def read_cfs(cfs, path, doc_id=None):
-    return cfs_ref(cfs, path, doc_id).get().to_dict()
+    if doc_id:
+        return cfs_ref(cfs, path, doc_id).get().to_dict()
+    else:
+        return [i.to_dict() for i in cfs_ref(cfs, path, doc_id).get()]
 
 
 def write_cfs(cfs, path, value, doc_id=None):
