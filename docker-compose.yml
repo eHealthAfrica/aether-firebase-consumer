@@ -29,3 +29,6 @@ services:
     command: >
       redis-server
       --requirepass password
+      --appendonly yes
+      --auto-aof-rewrite-percentage 100
+      --auto-aof-rewrite-min-size 64mb

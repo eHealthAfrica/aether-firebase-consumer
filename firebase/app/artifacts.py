@@ -83,12 +83,12 @@ class FirebaseInstance(BaseResource):
         name = self.definition["name"]
         credentials = firebase_credentials.Certificate(self.definition['credential'])
         LOG.debug('created credentials')
-        # credentials = Credentials.from_authorized_user_info(credentials)
+        options = {'databaseURL': self.definition['url']}
+        LOG.debug(f'making app with {name}, {credentials}, {options}')
         self.app = firebase_admin.initialize_app(
             name=name,
-            credentials=credentials,
-            options={}
-            # options={'databaseURL': self.definition['url']}
+            credential=credentials,
+            options=options
         )
         LOG.info('App initialized')
         return self.app
@@ -114,13 +114,14 @@ class FirebaseInstance(BaseResource):
             LOG.info('testing connection')
             rtdb = self.get_rtdb()
             LOG.info('got reference')
-            rtdb.reference('some/path')
-            # cref = self.get_cloud_firestore().collection(u'test2').document(u'adoc')
-            # return (ref and cref)
-            return True
+            ref = rtdb.reference('some/path')
+            cref = self.get_cloud_firestore().collection(
+                u'testconnection').document(u'consumerping')
+            return (ref and cref) is not None
         except UnavailableError as err:
-            LOG.debug(err)
             raise ConsumerHttpException(err, 500)
+        except Exception as unexpected:
+            raise ConsumerHttpException(unexpected, 500)
 
 
 class Subscription(BaseResource):
