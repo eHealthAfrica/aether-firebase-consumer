@@ -19,6 +19,7 @@
 # under the License.
 
 import fnmatch
+import json
 from time import sleep
 from typing import (
     Any,
@@ -79,36 +80,45 @@ class FirebaseInstance(BaseResource):
     def get_session(self):
         if self.app:
             return self.app
-        name = self.self.definition['name']
-        credentials = firebase_credentials(self.self.definition['credential'])
-        credentials = Credentials.from_authorized_user_info(credentials)
-        self.app = firebase_admin.App(
+        name = self.definition["name"]
+        credentials = firebase_credentials.Certificate(self.definition['credential'])
+        LOG.debug('created credentials')
+        # credentials = Credentials.from_authorized_user_info(credentials)
+        self.app = firebase_admin.initialize_app(
             name,
-            credentials,
+            credentials
+            # options={'databaseURL': self.definition['url']}
         )
-        self.get_rtdb()
-        self.get_cloud_firestore()
+        LOG.info('App initialized')
         return self.app
 
     def get_rtdb(self):
         if self.rtdb:
             return self.rtdb
         # get RTDB
+        LOG.info('Getting RTDB...')
         self.rtdb = helpers.RTDB(self.get_session())
+        LOG.info('got RTDB!')
         return self.rtdb
 
     def get_cloud_firestore(self):
         if self.cfs:
             return self.cfs
         self.cfs: firestore.Client = helpers.Firestore(self.get_session())
+        LOG.info('got CFS!')
         return self.cfs
 
     def test_connection(self, *args, **kwargs):
         try:
-            ref = self.get_rtdb().reference('some/path')
-            cref = self.get_cloud_firestore().collection(u'test2').document(u'adoc')
-            return (ref and cref)
+            LOG.info('testing connection')
+            rtdb = self.get_rtdb()
+            LOG.info('got reference')
+            rtdb.reference('some/path')
+            # cref = self.get_cloud_firestore().collection(u'test2').document(u'adoc')
+            # return (ref and cref)
+            return True
         except UnavailableError as err:
+            LOG.debug(err)
             raise ConsumerHttpException(err, 500)
 
 

@@ -57,7 +57,7 @@ case "$1" in
     ;;
 
     start )
-        python ./app/main.py "${@:2}"
+        python ./manage.py "${@:2}"
     ;;
 
     test_unit)
