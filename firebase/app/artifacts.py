@@ -85,8 +85,9 @@ class FirebaseInstance(BaseResource):
         LOG.debug('created credentials')
         # credentials = Credentials.from_authorized_user_info(credentials)
         self.app = firebase_admin.initialize_app(
-            name,
-            credentials
+            name=name,
+            credentials=credentials,
+            options={}
             # options={'databaseURL': self.definition['url']}
         )
         LOG.info('App initialized')
