@@ -1,0 +1,30 @@
+{
+  // Existing firebase configuration ...
+  "database": {
+    // "rules": "database.rules.json"
+  },
+  "firestore": {
+    // "rules": "firestore.rules"
+  },
+
+  // ...
+
+  // Optional emulator configuration. Default
+  // values are used if absent.
+  "emulators": {
+    "firestore": {
+      "host": "0.0.0.0"
+    },
+    // "functions": {
+    //   "port": "5001"
+    // },
+    "database": {
+      // "port": "9000"
+      "host": "0.0.0.0"
+    }
+    // "pubsub": {
+    //   "port": "8085"
+    // }
+
+  }
+}

@@ -28,3 +28,49 @@ from . import *  # get all test assets from test/__init__.py
 # then start the unit tests with
 # `pytest -m unit`
 # to run integration tests / all tests run the test_all.sh script from the /tests directory.
+
+
+@pytest.mark.integration
+def test__setup_consumer(LocalConsumer):
+    print(LocalConsumer)
+
+
+@pytest.mark.integration
+def test__two():
+    assert(True)
+
+
+# @pytest.mark.integration
+# def test__consumer_add_firebase(LocalConsumer, RequestClientT1, RequestClientT2):
+#     res = RequestClientT1.post(f'{URL}/firebase/add', json=examples.FB_INSTANCE)
+#     assert(res.json() is True)
+#     res = RequestClientT1.get(f'{URL}/firebase/list')
+#     assert(res.json() != [])
+#     res = RequestClientT2.get(f'{URL}/firebase/list')
+#     assert(res.json() == [])
+#     res = RequestClientT1.delete(f'{URL}/firebase/delete?id=default')
+#     assert(res.json() is True)
+#     res = RequestClientT1.get(f'{URL}/firebase/list')
+#     assert(res.json() == [])
+
+
+@pytest.mark.integration
+def test__consumer_add_job(LocalConsumer, RequestClientT1):
+    res = RequestClientT1.post(f'{URL}/job/add', json=examples.JOB)
+    assert(res.json() is True)
+
+
+@pytest.mark.integration
+def test__consumer_add_subscription(LocalConsumer, RequestClientT1, cfs):
+    res = RequestClientT1.post(f'{URL}/firebase/add', json=examples.FB_INSTANCE)
+    assert(res.json() is True)
+    res = RequestClientT1.post(f'{URL}/subscription/add', json=examples.SUBSCRIPTION)
+    assert(res.json() is True)
+    from time import sleep
+    _path = examples.SUBSCRIPTION.get('fb_options').get('target_path').format(topic=TEST_TOPIC)
+    for x in range(30):
+        cfs_msg = helpers.read_cfs(cfs, _path)
+        if cfs_msg:
+            LOG.info(cfs_msg)
+            return
+        sleep(1)

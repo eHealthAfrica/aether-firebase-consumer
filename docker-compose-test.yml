@@ -1,14 +1,48 @@
 version: "2.1"
 services:
 
-  firebases-consumer-test:
+  # -------------------------------------
+  # Firebase Eumulator
+  # -------------------------------------
+
+  emu:
+    image: ehealthafrica/firebase-emulator:latest
+    container_name: firebase_emulator
+    volumes:
+      # Change the Firebase configuration by mounting a local firebase.json
+      - ./conf/test-firebase.json:/app/firebase.json
+    ports:
+      - 5001:5001  # Cloud functions
+      - 9000:9000  # RTDB
+      - 8080:8080  # Cloud Firestore
+      - 8085:8085  # Cloud pub/sub
+      - 5000:5000  # Hosting
+    entrypoint:
+      ["firebase", "emulators:start"]
+
+  consumer-test:
     extends:
       file: docker-compose-base.yml
-      service: firebases-consumer
-    networks:
-      - test_net
+      service: firebase-consumer
+    environment:
+      # consumer settings
+      CONSUMER_NAME: 'FB-TEST'
+      TENANCY_HEADER: x-oauth-realm
+      # firebase emulator settings
+      FIRESTORE_EMULATOR_HOST: emu:8080
+      FIREBASE_DATABASE_EMULATOR_HOST: emu:9000
+      # redis
+      REDIS_PASSWORD: password
+      # kafka settings
+      KAFKA_CONFIG_PATH: /code/conf/consumer/kafka.json
+      KAFKA_URL: ${KAFKA_URL}
+      SECURITY.PROTOCOL: SASL_SSL
+      SASL.MECHANISM: PLAIN
+      SASL.USERNAME: ${KAFKA_SASL_USERNAME}
+      SASL.PASSWORD: ${KAFKA_SASL_PASSWORD}
 
-networks:
-  test_net:
-    external:
-      name: aether_test
+  redis:
+    image: redis:alpine
+    command: >
+      redis-server
+      --requirepass password
