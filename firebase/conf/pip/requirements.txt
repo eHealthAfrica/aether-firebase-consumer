@@ -40,7 +40,7 @@ google-resumable-media==0.5.0
 googleapis-common-protos==1.51.0
 greenlet==0.4.15
 grpcio==1.16.1
-httplib2==0.17.0
+httplib2==0.19.0
 idna==2.7
 importlib-metadata==1.5.0
 itsdangerous==1.1.0
